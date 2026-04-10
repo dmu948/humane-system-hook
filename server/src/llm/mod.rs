@@ -1,3 +1,4 @@
+use rig::completion::message::Message;
 use rig::prelude::*; // imports CompletionClient trait for .agent()
 use rig::providers;
 use tracing::{error, info};
@@ -53,8 +54,6 @@ impl LlmAgent {
             "openai" | "openai-compatible" => {
                 let api_key = config.resolve_api_key()
                     .ok_or("OpenAI api_key not set in config.toml")?;
-                // Use Chat Completions API (CompletionsClient) — more broadly compatible
-                // with third-party OpenAI-compatible endpoints.
                 let client = if let Some(ref base_url) = config.base_url {
                     providers::openai::CompletionsClient::builder()
                         .api_key(&api_key)
@@ -76,7 +75,33 @@ impl LlmAgent {
         }
     }
 
-    /// Send a prompt to the configured LLM and return the response text.
+    /// Send a prompt with conversation history to the LLM.
+    /// Falls back to simple prompt for Echo backend or empty history.
+    pub async fn chat(&self, utterance: &str, history: Vec<Message>) -> Result<String, String> {
+        use rig::completion::Chat;
+
+        if history.is_empty() {
+            return self.prompt(utterance).await;
+        }
+
+        match self {
+            LlmAgent::Echo => Ok(format!("Echo: {}", utterance)),
+            LlmAgent::Gemini(agent) => agent.chat(utterance, history).await.map_err(|e| {
+                error!(error = %e, "Gemini chat failed");
+                format!("Gemini error: {}", e)
+            }),
+            LlmAgent::Anthropic(agent) => agent.chat(utterance, history).await.map_err(|e| {
+                error!(error = %e, "Anthropic chat failed");
+                format!("Anthropic error: {}", e)
+            }),
+            LlmAgent::OpenAi(agent) => agent.chat(utterance, history).await.map_err(|e| {
+                error!(error = %e, "OpenAI chat failed");
+                format!("OpenAI error: {}", e)
+            }),
+        }
+    }
+
+    /// Send a single prompt with no conversation history.
     pub async fn prompt(&self, utterance: &str) -> Result<String, String> {
         use rig::completion::Prompt;
 

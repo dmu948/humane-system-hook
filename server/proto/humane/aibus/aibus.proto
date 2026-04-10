@@ -102,7 +102,7 @@ message SynapseUnderstandingResponse {
   }
 }
 
-// ---- Stub types (field numbers correct, bodies unused by server) ----
+// ---- Stub types (field numbers from decompiled source) ----
 
 message SynapseDeviceContext {
   repeated SynapsePreviousAction previous_actions = 1;
@@ -133,11 +133,33 @@ message SynapseFailure {}
 message SynapseHeartbeat {}
 message SynapseInterpretation {}
 message SynapseDisambiguation {}
-message SynapseTaoContent {}
-message SynapseObservationContent {}
-message SynapseInterpretationContent {}
-message SynapseMessageContent {}
-message SynapseSpeechContent {}
+message SynapseTaoContent {
+  string thought = 1;
+  string action = 2;
+  string observation = 3;
+}
+
+message SynapseObservationContent {
+  string observation = 1;
+  bool is_final = 2;
+  string action_name = 3;
+  SynapseSource source = 4;
+}
+
+message SynapseInterpretationContent {
+  string thought = 1;
+  string interpretation = 2;
+}
+
+message SynapseMessageContent {
+  string content = 1;
+}
+
+message SynapseSpeechContent {
+  // Audio speech = 1;  -- omitted, Audio type not defined
+  string speech_transcription = 2;
+  // SpeechSource source = 3;  -- omitted, enum not defined
+}
 
 // ---- Service ----
 

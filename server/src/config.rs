@@ -96,11 +96,18 @@ impl Config {
 }
 
 impl LlmConfig {
-    /// Resolve the API key: config file value takes priority, then env var.
+    /// Resolve the API key
     pub fn resolve_api_key(&self) -> Option<String> {
-        if let Some(ref key) = self.api_key {
+        let env_var = match self.provider.as_str() {
+            "gemini" => "GEMINI_API_KEY",
+            "anthropic" => "ANTHROPIC_API_KEY",
+            "openai" | "openai-compatible" => "OPENAI_API_KEY",
+            _ => return None,
+        };
+
+        if let Ok(key) = std::env::var(env_var).or_else(|_| self.api_key.clone().ok_or(())) {
             if !key.is_empty() {
-                return Some(key.clone());
+                return Some(key);
             }
         }
 
