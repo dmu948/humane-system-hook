@@ -1,0 +1,9 @@
+[llm]
+provider = "gemini"          # "gemini", "anthropic", "openai", "openai-compatible", "echo"
+model = "gemini-2.5-flash"   # model ID for the provider
+# api_key = "..."            # optional, overrides env var
+# base_url = "..."           # optional, for openai-compatible providers
+
+[server]
+port = 9090
+system_prompt = "You are a helpful assistant running on a Humane AI Pin. Keep responses concise - they will be displayed on a laser projector and spoken aloud."

@@ -1,0 +1,63 @@
+// Reconstructed from decompiled protobuf-lite Java classes.
+// WifiConfigService + UserInformationService — both in humane.account package.
+
+syntax = "proto3";
+
+package humane.account;
+
+import "google/protobuf/empty.proto";
+
+option java_multiple_files = true;
+
+// ---- WifiConfig ----
+
+message ListSecureWifiConfigsRequest {
+  // empty
+}
+
+message ListSecureWifiConfigsResponse {
+  repeated WifiConfig configs = 1;
+}
+
+message WifiConfig {
+  string ssid = 1;
+  string psk = 2;
+  string security_type = 3;
+  bool hidden = 4;
+  int32 priority = 5;
+  string eap_method = 6;
+  string phase2_method = 7;
+  string ca_certificate = 8;
+  string identity = 9;
+  string anonymous_identity = 10;
+  string password = 11;
+  string domain = 12;
+}
+
+// ---- UserInformation ----
+
+enum AuthorizationType {
+  UNKNOWN = 0;
+  OAUTH = 1;
+  DAC = 2;
+}
+
+message AccountInfo {
+  string email = 1;
+  AuthorizationType authorization_type = 2;
+}
+
+message PersonalDetailsResponse {
+  string preferred_name = 1;
+  AccountInfo account_info = 2;
+}
+
+// ---- Services ----
+
+service WifiConfigService {
+  rpc ListSecureWifiConfigs (ListSecureWifiConfigsRequest) returns (ListSecureWifiConfigsResponse);
+}
+
+service UserInformationService {
+  rpc GetUserPersonalDetails (google.protobuf.Empty) returns (PersonalDetailsResponse);
+}

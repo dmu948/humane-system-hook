@@ -1,0 +1,28 @@
+[package]
+name = "humane-server"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone gRPC server for Humane AI Pin"
+
+[[bin]]
+name = "humane-server"
+path = "src/main.rs"
+
+[dependencies]
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-stream = "0.3"
+rig-core = "0.34"
+toml = "0.8"
+futures = "0.3"
+
+[build-dependencies]
+tonic-build = "0.12"

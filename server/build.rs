@@ -1,0 +1,17 @@
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(false)
+        .compile_protos(
+            &[
+                "proto/humane/aibus/aibus.proto",
+                "proto/humane/pushrelay/pushrelay.proto",
+                "proto/humane/featureflags/featureflags.proto",
+                "proto/humane/account/account.proto",
+                "proto/humane/contacts/contacts.proto",
+                "proto/humane/events/events.proto",
+            ],
+            &["proto"],
+        )?;
+    Ok(())
+}
