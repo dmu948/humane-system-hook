@@ -115,11 +115,22 @@ fn is_vision_request(ctx: &SynapseDeviceContext) -> bool {
 
 /// Extract the observation text from a completed UnderstandScene round-trip.
 fn extract_vision_observation(ctx: &SynapseDeviceContext) -> Option<String> {
+    let mut candidate: Option<String> = None;
     for turn in ctx.turns.iter().rev() {
-        if let Some(synapse_chat_turn::Content::Observation(obs)) = &turn.content {
-            if !obs.is_final && !obs.observation.trim().is_empty() {
-                return Some(obs.observation.trim().to_string());
+        match &turn.content {
+            Some(synapse_chat_turn::Content::Observation(obs)) => {
+                if candidate.is_none() && !obs.is_final && !obs.observation.trim().is_empty() {
+                    candidate = Some(obs.observation.trim().to_string());
+                }
             }
+            Some(synapse_chat_turn::Content::Action(action)) => {
+                if action.action == "UnderstandScene" && candidate.is_some() {
+                    return candidate;
+                }
+            }
+            // Anything before the last UserRequest belongs to a previous conversation run and should be ignored
+            Some(synapse_chat_turn::Content::UserRequest(_)) => break,
+            _ => {}
         }
     }
     None
@@ -160,18 +171,18 @@ fn make_action_response(
 /// Map PirateWeather icon string to the device's integer weather icon code.
 fn pirate_weather_icon_to_device(icon: &str) -> i32 {
     match icon {
-        "clear-day" => 1,               // weather_01_sunny
-        "clear-night" => 33,            // weather_05_clear_skies_night
-        "partly-cloudy-day" => 3,       // weather_02_partly_cloudy_day
-        "partly-cloudy-night" => 35,    // weather_06_partly_cloudy_night
-        "cloudy" => 7,                  // weather_03_cloudy
-        "rain" => 12,                   // weather_07_rain
-        "snow" => 19,                   // weather_10_snow_flurries
-        "sleet" => 24,                  // weather_12_ice_and_sleet
-        "wind" => 32,                   // weather_13_windy
-        "fog" => 11,                    // weather_14_fog
-        "thunderstorm" => 15,           // weather_08_thunderstorms
-        _ => 3,                         // safe fallback: partly cloudy day
+        "clear-day" => 1,            // weather_01_sunny
+        "clear-night" => 33,         // weather_05_clear_skies_night
+        "partly-cloudy-day" => 3,    // weather_02_partly_cloudy_day
+        "partly-cloudy-night" => 35, // weather_06_partly_cloudy_night
+        "cloudy" => 7,               // weather_03_cloudy
+        "rain" => 12,                // weather_07_rain
+        "snow" => 19,                // weather_10_snow_flurries
+        "sleet" => 24,               // weather_12_ice_and_sleet
+        "wind" => 32,                // weather_13_windy
+        "fog" => 11,                 // weather_14_fog
+        "thunderstorm" => 15,        // weather_08_thunderstorms
+        _ => 3,                      // safe fallback: partly cloudy day
     }
 }
 
@@ -179,9 +190,7 @@ fn pirate_weather_icon_to_device(icon: &str) -> i32 {
 /// `kid` must be the fully-qualified Java class name of the inner proto.
 fn wrap_plaintext_envelope(kid: &str, data: Vec<u8>) -> encryption::EncryptedData {
     encryption::EncryptedData {
-        encryption_information: Some(encryption::EncryptionInformation {
-            kid: kid.into(),
-        }),
+        encryption_information: Some(encryption::EncryptionInformation { kid: kid.into() }),
         data,
     }
 }
