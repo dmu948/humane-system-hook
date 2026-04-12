@@ -37,5 +37,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- ADB WiFi bridge: manual trigger only.
+             Restarts adbd with an abstract unix socket listener bridged to TCP :5555 -->
+        <receiver
+            android:name=".AdbBridgeReceiver"
+            android:process="system"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.penumbraos.hook.ADB_BRIDGE" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
