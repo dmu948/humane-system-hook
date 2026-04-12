@@ -10,5 +10,11 @@
         <!-- No activities, no receivers, no services.
              This APK exists only to be loaded into other processes
              via sharedLibraryFiles. -->
+
+        <!-- Authoritative list of packages the injector should target at boot.
+             Comma-separated Android package names. -->
+        <meta-data
+            android:name="com.penumbraos.hook.TARGET_PACKAGES"
+            android:value="hu.ma.ne.ironman,humane.experience.onboarding,humane.experience.photography,hu.ma.ne.krypto,humane.experience.systemnavigation" />
     </application>
 </manifest>

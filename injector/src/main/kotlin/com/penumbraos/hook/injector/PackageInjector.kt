@@ -1,7 +1,6 @@
 package com.penumbraos.hook.injector
 
 import android.util.Log
-import java.io.File
 
 /**
  * Directly mutates PMS's in-memory data structures to inject our hook APK
@@ -215,19 +214,28 @@ object PackageInjector {
     // Helpers
     // -----------------------------------------------------------------------
 
+    /**
+     * Look up the hook APK's base path from PMS's in-memory data.
+     */
     private fun findHookApkPath(): String? {
-        val primary = File("/data/app/$HOOK_APK_PACKAGE-injected/base.apk")
-        if (primary.exists()) return primary.absolutePath
-
-        // Fallback scan
-        val dataApp = File("/data/app")
-        val dirs = dataApp.listFiles() ?: return null
-        for (dir in dirs) {
-            if (dir.name.startsWith(HOOK_APK_PACKAGE) && dir.isDirectory) {
-                val apk = File(dir, "base.apk")
-                if (apk.exists()) return apk.absolutePath
-            }
+        val hookPackage = mapGetMethod!!.invoke(pmsPackages, HOOK_APK_PACKAGE)
+        if (hookPackage == null) {
+            Log.e(TAG, "Hook package '$HOOK_APK_PACKAGE' not found in PMS.mPackages")
+            return null
         }
-        return null
+
+        return try {
+            val getPath = hookPackage.javaClass.getMethod("getBaseApkPath")
+            val path = getPath.invoke(hookPackage) as? String
+            if (path != null) {
+                Log.i(TAG, "Hook APK path from PMS: $path")
+            } else {
+                Log.e(TAG, "getBaseApkPath() returned null for $HOOK_APK_PACKAGE")
+            }
+            path
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to get base APK path for $HOOK_APK_PACKAGE", t)
+            null
+        }
     }
 }
