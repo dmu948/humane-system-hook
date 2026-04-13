@@ -315,9 +315,9 @@ impl AiBusService for AiBusServiceImpl {
         // Call LLM agent with conversation history
         let response_text = match self.agent.chat(utterance, history).await {
             Ok(text) => text,
-            Err(e) => {
-                warn!(error = %e, "LLM chat failed, falling back to error message");
-                format!("Sorry, I encountered an error: {}", e)
+            Err(error) => {
+                warn!(error = %error, "LLM chat failed, falling back to error message");
+                error
             }
         };
 
@@ -367,9 +367,9 @@ impl AiBusService for AiBusServiceImpl {
 
         let observation = match self.agent.vision_prompt(question, &image_b64).await {
             Ok(text) => text,
-            Err(e) => {
-                warn!(error = %e, "Vision LLM failed");
-                format!("I wasn't able to analyze the image: {}", e)
+            Err(error) => {
+                warn!(error = %error, "Vision LLM failed");
+                error
             }
         };
 

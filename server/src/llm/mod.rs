@@ -1,10 +1,73 @@
-use rig::completion::message::{Message, UserContent, ImageMediaType};
+use std::fmt::Display;
+
+use rig::completion::message::{ImageMediaType, Message, UserContent};
 use rig::prelude::*; // imports CompletionClient trait for .agent()
 use rig::providers;
 use rig::OneOrMany;
 use tracing::{error, info};
 
 use crate::config::LlmConfig;
+
+/// Convert a raw LLM provider error into a friendly, speakable sentence.
+fn friendly_error_message(e: &impl Display) -> String {
+    let raw = e.to_string().to_lowercase();
+
+    if raw.contains("429")
+        || raw.contains("rate limit")
+        || raw.contains("resource_exhausted")
+        || raw.contains("too many requests")
+    {
+        "I'm getting too many requests right now. Please try again in a moment.".into()
+    } else if raw.contains("401")
+        || raw.contains("403")
+        || raw.contains("unauthorized")
+        || raw.contains("forbidden")
+        || raw.contains("invalid api key")
+        || raw.contains("permission denied")
+    {
+        "There's a problem with the API key configuration. Please check the server settings.".into()
+    } else if raw.contains("404")
+        || raw.contains("model not found")
+        || raw.contains("not_found")
+        || raw.contains("does not exist")
+    {
+        "The configured AI model wasn't found. Please check the server settings.".into()
+    } else if raw.contains("500")
+        || raw.contains("502")
+        || raw.contains("503")
+        || raw.contains("internal server error")
+        || raw.contains("service unavailable")
+        || raw.contains("bad gateway")
+    {
+        "The AI service is temporarily unavailable. Please try again shortly.".into()
+    } else if raw.contains("timeout")
+        || raw.contains("timed out")
+        || raw.contains("deadline exceeded")
+    {
+        "The request to the AI service timed out. Please try again.".into()
+    } else if raw.contains("connection")
+        || raw.contains("dns")
+        || raw.contains("resolve")
+        || raw.contains("unreachable")
+    {
+        "I couldn't reach the AI service. Please check the server's internet connection.".into()
+    } else if raw.contains("content filter")
+        || raw.contains("safety")
+        || raw.contains("blocked")
+        || raw.contains("harm_category")
+    {
+        "The AI service declined to answer that. Try rephrasing your question.".into()
+    } else if raw.contains("context length")
+        || raw.contains("too long")
+        || raw.contains("max tokens")
+        || raw.contains("token limit")
+    {
+        "That conversation got too long for the AI service to handle. Try starting a new one."
+            .into()
+    } else {
+        "Something went wrong while contacting the AI service. Please try again.".into()
+    }
+}
 
 /// Enum-dispatched LLM agent. Each variant wraps a concrete rig agent type
 /// (the `Prompt` trait is not object-safe due to RPITIT).
@@ -89,15 +152,15 @@ impl LlmAgent {
             LlmAgent::Echo => Ok(format!("Echo: {}", utterance)),
             LlmAgent::Gemini(agent) => agent.chat(utterance, history).await.map_err(|e| {
                 error!(error = %e, "Gemini chat failed");
-                format!("Gemini error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::Anthropic(agent) => agent.chat(utterance, history).await.map_err(|e| {
                 error!(error = %e, "Anthropic chat failed");
-                format!("Anthropic error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::OpenAi(agent) => agent.chat(utterance, history).await.map_err(|e| {
                 error!(error = %e, "OpenAI chat failed");
-                format!("OpenAI error: {}", e)
+                friendly_error_message(&e)
             }),
         }
     }
@@ -110,21 +173,25 @@ impl LlmAgent {
             LlmAgent::Echo => Ok(format!("Echo: {}", utterance)),
             LlmAgent::Gemini(agent) => agent.prompt(utterance).await.map_err(|e| {
                 error!(error = %e, "Gemini prompt failed");
-                format!("Gemini error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::Anthropic(agent) => agent.prompt(utterance).await.map_err(|e| {
                 error!(error = %e, "Anthropic prompt failed");
-                format!("Anthropic error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::OpenAi(agent) => agent.prompt(utterance).await.map_err(|e| {
                 error!(error = %e, "OpenAI prompt failed");
-                format!("OpenAI error: {}", e)
+                friendly_error_message(&e)
             }),
         }
     }
 
     /// Send a vision prompt with an image (base64-encoded JPEG) and a question.
-    pub async fn vision_prompt(&self, question: &str, image_base64: &str) -> Result<String, String> {
+    pub async fn vision_prompt(
+        &self,
+        question: &str,
+        image_base64: &str,
+    ) -> Result<String, String> {
         use rig::completion::Prompt;
 
         let message = Message::User {
@@ -135,22 +202,23 @@ impl LlmAgent {
                     Some(ImageMediaType::JPEG),
                     None, // detail: auto
                 ),
-            ]).expect("non-empty content vec"),
+            ])
+            .expect("non-empty content vec"),
         };
 
         match self {
             LlmAgent::Echo => Ok(format!("Echo: [vision] {}", question)),
             LlmAgent::Gemini(agent) => agent.prompt(message).await.map_err(|e| {
                 error!(error = %e, "Gemini vision prompt failed");
-                format!("Gemini error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::Anthropic(agent) => agent.prompt(message).await.map_err(|e| {
                 error!(error = %e, "Anthropic vision prompt failed");
-                format!("Anthropic error: {}", e)
+                friendly_error_message(&e)
             }),
             LlmAgent::OpenAi(agent) => agent.prompt(message).await.map_err(|e| {
                 error!(error = %e, "OpenAI vision prompt failed");
-                format!("OpenAI error: {}", e)
+                friendly_error_message(&e)
             }),
         }
     }
