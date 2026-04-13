@@ -468,19 +468,19 @@ impl CaptureService for CaptureServiceImpl {
         Ok(Response::new(GetCaptureConfigResponse {
             num_photos_per_burst: 1,
             create_memory_retry_config: Some(CaptureRetryConfig {
-                max_retries: 3,
-                initial_delay_ms: 1000,
-                backoff_multiplier: 2.0,
+                num_retries: 10,
+                retry_interval_seconds: 30,
+                policy: CaptureRetryPolicy::Exponential as i32,
             }),
             asset_upload_retry_config: Some(CaptureRetryConfig {
-                max_retries: 3,
-                initial_delay_ms: 1000,
-                backoff_multiplier: 2.0,
+                num_retries: 10,
+                retry_interval_seconds: 30,
+                policy: CaptureRetryPolicy::Exponential as i32,
             }),
             delete_memory_retry_config: Some(CaptureRetryConfig {
-                max_retries: 3,
-                initial_delay_ms: 1000,
-                backoff_multiplier: 2.0,
+                num_retries: 10,
+                retry_interval_seconds: 30,
+                policy: CaptureRetryPolicy::Exponential as i32,
             }),
         }))
     }

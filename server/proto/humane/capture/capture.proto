@@ -330,9 +330,15 @@ message GetCaptureConfigResponse {
 }
 
 message CaptureRetryConfig {
-  int32 max_retries = 1;
-  int32 initial_delay_ms = 2;
-  float backoff_multiplier = 3;
+  int32 num_retries = 1;
+  int32 retry_interval_seconds = 2;
+  CaptureRetryPolicy policy = 3;
+}
+
+enum CaptureRetryPolicy {
+  CAPTURE_RETRY_POLICY_UNSPECIFIED = 0;
+  CAPTURE_RETRY_POLICY_LINEAR = 1;
+  CAPTURE_RETRY_POLICY_EXPONENTIAL = 2;
 }
 
 // ─── GetFoodLogSummary ──────────────────────────────────────────────
