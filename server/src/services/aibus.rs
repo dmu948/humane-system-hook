@@ -33,7 +33,17 @@ pub struct AiBusServiceImpl {
 fn extract_history(ctx: &SynapseDeviceContext) -> Vec<Message> {
     let mut history = Vec::new();
 
-    for turn in &ctx.turns {
+    let last_user_request_idx = ctx
+        .turns
+        .iter()
+        .rposition(|t| matches!(&t.content, Some(synapse_chat_turn::Content::UserRequest(_))));
+
+    for (i, turn) in ctx.turns.iter().enumerate() {
+        // Skip the current run's user_request
+        if Some(i) == last_user_request_idx {
+            continue;
+        }
+
         let user = turn.user(); // SynapseUser enum
         let content = match &turn.content {
             Some(c) => c,
