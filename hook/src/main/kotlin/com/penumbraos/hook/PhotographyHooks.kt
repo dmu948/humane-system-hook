@@ -17,6 +17,7 @@ object PhotographyHooks {
     fun install(cl: ClassLoader) {
         Log.i(TAG, "Installing photography hooks...")
 
+        TcmSilencer.install(cl)
         ChannelFactoryBypass.install(cl)
         DataProtectorBypass.install(cl)
 
