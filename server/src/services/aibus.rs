@@ -9,6 +9,7 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+use crate::db::Database;
 use crate::llm::LlmAgent;
 use crate::nearby::NearbyClient;
 use crate::proto::aibus::ai_bus_service_server::AiBusService;
@@ -20,6 +21,40 @@ pub struct AiBusServiceImpl {
     pub pirate_weather_api_key: Option<String>,
     pub http_client: reqwest::Client,
     pub nearby_client: NearbyClient,
+    pub db: Database,
+}
+
+impl AiBusServiceImpl {
+    /// Persist a conversation to SQLite in a background task.
+    fn spawn_save_conversation(
+        &self,
+        run_id: &str,
+        utterance: &str,
+        is_vision: bool,
+        history: &[Message],
+        response_text: &str,
+    ) {
+        let db = self.db.clone();
+        let run_id = run_id.to_string();
+        let utterance = utterance.to_string();
+        let history = history.to_vec();
+        let response_text = response_text.to_string();
+
+        tokio::spawn(async move {
+            if let Err(e) = db
+                .save_understand_conversation(
+                    &run_id,
+                    &utterance,
+                    is_vision,
+                    &history,
+                    &response_text,
+                )
+                .await
+            {
+                warn!(error = %e, "failed to save conversation to db");
+            }
+        });
+    }
 }
 
 /// Extract conversation history from device_context.turns into rig Messages.
@@ -290,6 +325,8 @@ impl AiBusService for AiBusServiceImpl {
             if let Some(observation_text) = extract_vision_observation(ctx) {
                 info!(observation = %observation_text, "<<< Vision round-trip complete, responding");
 
+                self.spawn_save_conversation(&run_id, utterance, true, &history, &observation_text);
+
                 // TODO: We probably want to feed the observation + original question
                 // back to the LLM for a more conversational/contextualized response,
                 // rather than just echoing the raw observation. For now, keep it simple.
@@ -323,7 +360,7 @@ impl AiBusService for AiBusServiceImpl {
         // --- Normal (non-vision) handling ---
 
         // Call LLM agent with conversation history
-        let response_text = match self.agent.chat(utterance, history).await {
+        let response_text = match self.agent.chat(utterance, history.clone()).await {
             Ok(text) => text,
             Err(error) => {
                 warn!(error = %error, "LLM chat failed, falling back to error message");
@@ -332,6 +369,8 @@ impl AiBusService for AiBusServiceImpl {
         };
 
         info!(response = %response_text, "<<< Understand responding");
+
+        self.spawn_save_conversation(&run_id, utterance, false, &history, &response_text);
 
         let response = make_action_response(
             "Respond",

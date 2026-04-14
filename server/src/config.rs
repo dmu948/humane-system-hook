@@ -55,6 +55,10 @@ pub struct StorageConfig {
     /// Directory for storing captured media files.
     #[serde(default = "default_media_dir")]
     pub media_dir: String,
+
+    /// Path to the SQLite database file.
+    #[serde(default = "default_db_path")]
+    pub db_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +89,10 @@ fn default_media_dir() -> String {
     "./media".into()
 }
 
+fn default_db_path() -> String {
+    "./data/penumbra.db".into()
+}
+
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
@@ -111,6 +119,7 @@ impl Default for StorageConfig {
     fn default() -> Self {
         Self {
             media_dir: default_media_dir(),
+            db_path: default_db_path(),
         }
     }
 }

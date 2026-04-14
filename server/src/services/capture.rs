@@ -379,7 +379,7 @@ impl CaptureService for CaptureServiceImpl {
 
         // Find which memory owns this filename
         let store = self.store.lock().await;
-        let memory = store.find_memory_for_file(&req.filename);
+        let memory = store.find_memory_for_file(&req.filename).await;
         let uuid = match memory {
             Some(m) => m.uuid.clone(),
             None => {

@@ -1,4 +1,4 @@
-//! Filesystem-backed media storage for captured photos, videos, and notes.
+//! Media storage with filesystem for binary files and SQLite for metadata.
 
 use std::path::{Path, PathBuf};
 
@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{info, warn};
+
+use crate::db::Database;
 
 // ─── Memory metadata ────────────────────────────────────────────────
 
@@ -50,36 +52,23 @@ pub struct Location {
 
 pub struct MediaStore {
     base_dir: PathBuf,
-    memories: Vec<MemoryRecord>,
+    db: Database,
 }
 
+#[allow(dead_code)] // Public API — some methods reserved for future features
 impl MediaStore {
     /// Open (or create) the media store at the given directory.
-    pub async fn open(base_dir: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn open(
+        base_dir: impl AsRef<Path>,
+        db: Database,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let base_dir = base_dir.as_ref().to_path_buf();
         fs::create_dir_all(&base_dir).await?;
 
-        let index_path = base_dir.join("memories.json");
-        let memories = if index_path.exists() {
-            let data = fs::read_to_string(&index_path).await?;
-            serde_json::from_str(&data).unwrap_or_else(|e| {
-                warn!("failed to parse memories.json, starting fresh: {e}");
-                Vec::new()
-            })
-        } else {
-            Vec::new()
-        };
+        let count = db.list_memories().await.map(|v| v.len()).unwrap_or(0);
+        info!(dir = %base_dir.display(), count, "media store opened (sqlite)");
 
-        info!(dir = %base_dir.display(), count = memories.len(), "media store opened");
-        Ok(Self { base_dir, memories })
-    }
-
-    /// Persist the index to disk.
-    async fn flush(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let data = serde_json::to_string_pretty(&self.memories)?;
-        let path = self.base_dir.join("memories.json");
-        fs::write(&path, data).await?;
-        Ok(())
+        Ok(Self { base_dir, db })
     }
 
     /// Create a new memory record and its directory.
@@ -91,12 +80,12 @@ impl MediaStore {
         created_at: &str,
         files: Vec<String>,
         location: Option<Location>,
-    ) -> Result<&MemoryRecord, Box<dyn std::error::Error>> {
+    ) -> Result<MemoryRecord, Box<dyn std::error::Error>> {
         let dir = self.base_dir.join(&uuid);
         fs::create_dir_all(&dir).await?;
 
         let record = MemoryRecord {
-            uuid: uuid.clone(),
+            uuid,
             memory_type: memory_type.to_string(),
             device_local_id: device_local_id.to_string(),
             created_at: created_at.to_string(),
@@ -105,9 +94,13 @@ impl MediaStore {
             thumbnail_count: 0,
             location,
         };
-        self.memories.push(record);
-        self.flush().await?;
-        Ok(self.memories.last().unwrap())
+
+        self.db
+            .create_memory(&record)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+
+        Ok(record)
     }
 
     /// Save a thumbnail as a separate .jpg file.
@@ -122,13 +115,15 @@ impl MediaStore {
         fs::write(&path, data).await?;
 
         // Update thumbnail count and add to files list
-        if let Some(rec) = self.memories.iter_mut().find(|m| m.uuid == uuid) {
-            rec.thumbnail_count = rec.thumbnail_count.max(index + 1);
-            if !rec.files.contains(&filename) {
-                rec.files.push(filename.clone());
-            }
-            self.flush().await?;
-        }
+        let new_count = index + 1;
+        self.db
+            .set_thumbnail_count(uuid, new_count)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+        self.db
+            .add_file(uuid, &filename)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
         info!(uuid, filename, bytes = data.len(), "saved thumbnail");
         Ok(filename)
@@ -158,21 +153,18 @@ impl MediaStore {
         &mut self,
         uuid: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        if let Some(rec) = self.memories.iter_mut().find(|m| m.uuid == uuid) {
-            rec.status = MemoryStatus::Complete;
-            self.flush().await?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        self.db
+            .set_memory_status(uuid, &MemoryStatus::Complete)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })
     }
 
     /// Mark a memory as failed.
     pub async fn fail_memory(&mut self, uuid: &str) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(rec) = self.memories.iter_mut().find(|m| m.uuid == uuid) {
-            rec.status = MemoryStatus::Failed;
-            self.flush().await?;
-        }
+        self.db
+            .set_memory_status(uuid, &MemoryStatus::Failed)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
         Ok(())
     }
 
@@ -182,34 +174,37 @@ impl MediaStore {
         if dir.exists() {
             fs::remove_dir_all(&dir).await?;
         }
-        let before = self.memories.len();
-        self.memories.retain(|m| m.uuid != uuid);
-        let removed = self.memories.len() < before;
-        if removed {
-            self.flush().await?;
-        }
-        Ok(removed)
+        self.db
+            .delete_memory(uuid)
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })
     }
 
     /// Look up a memory by UUID.
-    pub fn get_memory(&self, uuid: &str) -> Option<&MemoryRecord> {
-        self.memories.iter().find(|m| m.uuid == uuid)
+    pub async fn get_memory(&self, uuid: &str) -> Option<MemoryRecord> {
+        self.db.get_memory(uuid).await.ok().flatten()
     }
 
     /// Find a memory that owns a given filename.
-    pub fn find_memory_for_file(&self, filename: &str) -> Option<&MemoryRecord> {
-        self.memories
-            .iter()
-            .find(|m| m.files.iter().any(|f| f == filename))
+    pub async fn find_memory_for_file(&self, filename: &str) -> Option<MemoryRecord> {
+        self.db.find_memory_for_file(filename).await.ok().flatten()
     }
 
     /// List all memories.
-    pub fn list_memories(&self) -> &[MemoryRecord] {
-        &self.memories
+    pub async fn list_memories(&self) -> Vec<MemoryRecord> {
+        self.db.list_memories().await.unwrap_or_else(|e| {
+            warn!(error = %e, "failed to list memories from db");
+            Vec::new()
+        })
     }
 
     /// Base directory path.
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
+    }
+
+    /// Access the underlying database handle.
+    pub fn db(&self) -> &Database {
+        &self.db
     }
 }

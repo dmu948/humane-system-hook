@@ -5,6 +5,7 @@
 //! HTTP PUT /upload/:uuid/:filename is handled by axum for media uploads.
 
 mod config;
+mod db;
 mod dedup;
 mod llm;
 mod nearby;
@@ -90,6 +91,7 @@ use services::user_info::UserInformationServiceImpl;
 use services::wifi_config::WifiConfigServiceImpl;
 
 use config::Config;
+use db::Database;
 use dedup::DedupRouter;
 use llm::LlmAgent;
 use storage::MediaStore;
@@ -229,9 +231,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .clone()
         .unwrap_or_else(|| "Penumbra".into());
 
-    // Open media store
+    // Open SQLite database
+    let database = Database::open(&config.storage.db_path)?;
+
+    // Open media store (uses SQLite for metadata, filesystem for binary files)
     let media_store = Arc::new(Mutex::new(
-        MediaStore::open(&config.storage.media_dir).await?,
+        MediaStore::open(&config.storage.media_dir, database.clone()).await?,
     ));
 
     // Server address the device will use in upload URLs
@@ -260,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("Weather: no API key. EncryptedWeather will return UNAVAILABLE");
     }
-    info!("Storage: media_dir={}", config.storage.media_dir);
+    info!("Storage: media_dir={}, db={}", config.storage.media_dir, config.storage.db_path);
     info!("Services:");
     info!(
         "  - humane.aibus.AIBusService/Understand       ({})",
@@ -294,6 +299,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pirate_weather_api_key,
         nearby_client: nearby::NearbyClient::new(http_client.clone()),
         http_client,
+        db: database,
     }))
     .dedup::<AiBus>("EncryptedWeather", Duration::from_secs(300))
     .dedup::<AiBus>("EncryptedNearbySearch", Duration::from_secs(30))
