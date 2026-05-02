@@ -57,4 +57,44 @@ object BootstrapConfig {
         Log.i(TAG, "Wrote canonical config to ${configFile.absolutePath}")
         return configFile.absolutePath
     }
+
+    /** Best-effort extraction of advertised metadata from the config. */
+    data class AdvertisedConfig(val displayName: String, val httpPort: Int)
+
+    fun readAdvertisedConfig(configPath: String): AdvertisedConfig {
+        val defaults = AdvertisedConfig(displayName = "Ai Pin", httpPort = 8080)
+        val text = try {
+            File(configPath).readText()
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to read canonical config for advertisement", t)
+            return defaults
+        }
+
+        // Tiny, intentionally-naive TOML scraper: we only need two scalars and
+        // we control the file format. Comments and tables are tolerated;
+        // multi-line strings, inline tables, and arrays of tables are not used here.
+        var displayName: String? = null
+        var httpPort: Int? = null
+
+        for (rawLine in text.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty() || line.startsWith('[')) continue
+            val eq = line.indexOf('=')
+            if (eq <= 0) continue
+            val key = line.substring(0, eq).trim()
+            val value = line.substring(eq + 1).trim().trim('"', '\'')
+            when (key) {
+                "display_name" -> if (value.isNotEmpty()) displayName = value
+                "http_bind_addr" -> {
+                    val portStr = value.substringAfterLast(':', "")
+                    portStr.toIntOrNull()?.let { httpPort = it }
+                }
+            }
+        }
+
+        return AdvertisedConfig(
+            displayName = displayName ?: defaults.displayName,
+            httpPort = httpPort ?: defaults.httpPort,
+        )
+    }
 }

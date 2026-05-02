@@ -50,6 +50,10 @@ android {
     namespace = "com.penumbraos.server"
     compileSdk = 34
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     signingConfigs {
         create("release") {
             storeFile = rootProject.file("abxdroppedapk.keystore")
@@ -107,4 +111,5 @@ tasks.named("preBuild") {
 }
 
 dependencies {
+    implementation("org.jmdns:jmdns:3.6.3")
 }

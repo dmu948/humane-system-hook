@@ -23,6 +23,26 @@ object ServerRuntime {
     @Volatile
     private var currentConfigPath: String? = null
 
+    @Volatile
+    private var stateListener: ((Boolean) -> Unit)? = null
+
+    /**
+     * Registers a listener that receives running-state transitions of the
+     * supervised server process. The callback is invoked on the supervisor
+     * thread; consumers should marshal to their own executor as needed.
+     */
+    fun setStateListener(listener: ((Boolean) -> Unit)?) {
+        stateListener = listener
+    }
+
+    private fun notifyState(running: Boolean) {
+        try {
+            stateListener?.invoke(running)
+        } catch (t: Throwable) {
+            Log.w(TAG, "State listener threw", t)
+        }
+    }
+
     fun start(context: Context, configPath: String) {
         desiredRunning.set(true)
         appContext = context.applicationContext
@@ -51,6 +71,7 @@ object ServerRuntime {
         } catch (t: Throwable) {
             Log.w(TAG, "Failed to stop server process", t)
         }
+        notifyState(false)
     }
 
     private fun startProcessIfNeeded() {
@@ -66,6 +87,7 @@ object ServerRuntime {
 
             process = NativeBridge.start(context, configPath)
             Log.i(TAG, "Server runtime started")
+            notifyState(true)
         }
     }
 
@@ -112,6 +134,7 @@ object ServerRuntime {
                     }
                 }
                 Log.w(TAG, "Server process exited with code $exitCode")
+                notifyState(false)
 
                 if (desiredRunning.get()) {
                     Thread.sleep(RESTART_DELAY_MS)
