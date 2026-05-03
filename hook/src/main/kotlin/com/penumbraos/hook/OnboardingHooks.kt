@@ -28,6 +28,7 @@ object OnboardingHooks {
         hookOpaque(cl)
 
         ConnectivityCheckBypass.install(cl)
+        WirelessChargingBypass.install(cl)
 
         Log.i(TAG, "Onboarding hooks installed")
     }

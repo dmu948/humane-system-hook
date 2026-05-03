@@ -20,6 +20,7 @@ object PhotographyHooks {
         TcmSilencer.install(cl)
         ChannelFactoryBypass.install(cl)
         DataProtectorBypass.install(cl)
+        WirelessChargingBypass.install(cl)
 
         Log.i(TAG, "Photography hooks installed")
     }

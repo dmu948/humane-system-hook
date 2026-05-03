@@ -62,6 +62,9 @@ object IronmanHooks {
         // Silence Memfault RemoteMetricsService
         hookRemoteMetricsService(cl)
 
+        // Bypass blocking IWlcService.disableTx binder calls
+        WirelessChargingBypass.install(cl)
+
         Log.i(TAG, "Ironman hooks installed")
     }
 
