@@ -14,6 +14,7 @@ object SettingsHooks {
 
         TcmSilencer.install(cl)
         ConnectivityCheckBypass.install(cl)
+        EsimSettingsHooks.install(cl)
 
         Log.w(TAG, "Settings hooks installed")
     }
