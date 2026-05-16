@@ -3,6 +3,10 @@
 //! All methods use [`tokio::task::spawn_blocking`] internally so callers can
 //! treat them as async without blocking the tokio runtime.
 
+mod contacts;
+
+pub use contacts::{ContactImportError, ContactRecord};
+
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -60,7 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_conv_messages_conv ON conversation_messages(conve
 /// Thread-safe handle to the SQLite database.
 #[derive(Clone)]
 pub struct Database {
-    conn: Arc<Mutex<Connection>>,
+    pub(super) conn: Arc<Mutex<Connection>>,
 }
 
 #[allow(dead_code)]
@@ -75,6 +79,7 @@ impl Database {
 
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        conn.execute_batch(contacts::CONTACTS_SCHEMA)?;
 
         info!(path = %path.display(), "database opened");
 

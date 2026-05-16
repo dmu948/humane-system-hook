@@ -4,7 +4,10 @@
 //! Network Access (LNA) API.  All responses include CORS headers so the
 //! public HTTPS portal can reach this HTTP server on the LAN.
 
+mod contacts;
+
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,6 +22,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn};
 
 use crate::config::Config;
+use crate::db::Database;
 use crate::esim::{
     CellularStatusError, DeviceToggleError, EsimBridge, EsimRequestError, EsimRequestRecord,
     EsimSnapshot,
@@ -36,6 +40,7 @@ const NETWORK_TOGGLE_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct ApiState {
     pub store: Arc<Mutex<MediaStore>>,
+    pub db: Database,
     pub config: Arc<Config>,
     pub events_tx: tokio::sync::broadcast::Sender<Event>,
     /// Path to config.toml on disk — needed for writing settings back.
@@ -54,6 +59,8 @@ pub struct ApiState {
     pub log_file_prefix: String,
     /// Persistent eSIM bridge to the Android server app.
     pub esim_bridge: EsimBridge,
+    /// One-shot flag consumed by the device contacts sync hook.
+    pub contact_client_reset_pending: Arc<AtomicBool>,
 }
 
 // ─── Event types for the streaming endpoint ─────────────────────────
@@ -78,6 +85,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/memories/{uuid}", delete(delete_memory))
         .route("/api/memories/{uuid}/thumbnail/{index}", get(get_thumbnail))
         .route("/api/memories/{uuid}/files/{filename}", get(get_file))
+        .nest("/api", contacts::router())
         .route("/api/device", get(get_device))
         .route("/api/settings", get(get_settings))
         .route("/api/settings", put(update_settings))

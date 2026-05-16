@@ -59,6 +59,7 @@ mod proto {
 }
 
 use std::path::{Path as FsPath, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -353,12 +354,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  - humane.aibus.AIBusService/AnalyzeImage     ({}, vision)",
         config.llm.provider
     );
-    info!("  - humane.pushrelay.PushRelayService/Subscribe (no-op hold)");
+    info!("  - humane.pushrelay.PushRelayService/Subscribe (push stream)");
     info!("  - humane.pushrelay.PushRelayService/GetPushTokens (empty)");
     info!("  - humane.featureflags.FeatureFlagsService/GetFlags (empty)");
     info!("  - humane.account.WifiConfigService/ListSecureWifiConfigs (empty)");
     info!("  - humane.account.UserInformationService/GetUserPersonalDetails (stub)");
-    info!("  - humane.contacts.ContactsRPCService/GetContacts (empty)");
+    info!("  - humane.contacts.ContactsRPCService/GetContacts (sqlite contacts)");
     info!("  - humane.events.EventsIngestService/Ingest (discard)");
     info!("  - humane.events.EventsIngestService/IngestBatch (discard)");
     info!("  - humane.provisioning.DeviceOnboardingDACService/* (onboarding)");
@@ -388,7 +389,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pirate_weather_api_key: shared_weather_key.clone(),
         nearby_client: nearby::NearbyClient::new(http_client.clone()),
         http_client: http_client.clone(),
-        db: database,
+        db: database.clone(),
     }))
     .dedup::<AiBus>("EncryptedWeather", Duration::from_secs(300))
     .dedup::<AiBus>("EncryptedNearbySearch", Duration::from_secs(30))
@@ -400,7 +401,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .add_service(UserInformationServiceServer::new(
         UserInformationServiceImpl,
     ))
-    .add_service(ContactsRpcServiceServer::new(ContactsRpcServiceImpl))
+    .add_service(ContactsRpcServiceServer::new(ContactsRpcServiceImpl {
+        db: database.clone(),
+    }))
     .add_service(EventsIngestServiceServer::new(EventsIngestServiceImpl))
     .add_service(DeviceOnboardingDacServiceServer::new(
         ProvisioningServiceImpl {
@@ -430,6 +433,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build the REST API router for the web portal
     let api_state = api::ApiState {
         store: media_store,
+        db: database,
         config: Arc::new(config),
         events_tx,
         config_path,
@@ -440,6 +444,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log_dir: log_dir_for_api,
         log_file_prefix: log_file_prefix_for_api,
         esim_bridge,
+        contact_client_reset_pending: Arc::new(AtomicBool::new(false)),
     };
 
     // CORS layer for the web portal (public HTTPS → local HTTP via LNA).
@@ -448,7 +453,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // requests from a public site to a LAN server.
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
-        .allow_methods([Method::GET, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([http::header::CONTENT_TYPE])
         .expose_headers([http::header::CONTENT_TYPE]);
 
