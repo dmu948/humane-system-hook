@@ -95,9 +95,10 @@ class HookComponentFactory : AppComponentFactory() {
      *
      * Load order:
      * 1. AliuHook libs (libc++_shared, liblsplant, libaliuhook) — in dependency order
-     * 2. Frida Gadget — starts a listen server on port 27042 for interactive exploration.
-     *    Config file (libfrida-gadget.config.so) must be extracted alongside it;
-     *    it sets on_load=resume so ironman is not blocked at startup.
+     * 2. Optional Frida Gadget, if packaged with -PincludeFrida=true. It starts a
+     *    listen server on port 27042 for interactive exploration. Config file
+     *    (libfrida-gadget.config.so) must be extracted alongside it; it sets
+     *    on_load=resume so ironman is not blocked at startup.
      */
     private fun loadNativeLibs() {
         val libDir = findHookNativeLibDir()
@@ -120,9 +121,10 @@ class HookComponentFactory : AppComponentFactory() {
             }
         }
 
-        // Frida Gadget — loaded AFTER AliuHook so method hooks are already installed.
-        // On load, Gadget reads libfrida-gadget.config.so from the same directory
-        // and starts a listen server (127.0.0.1:27042, on_load=resume).
+        // Optional Frida Gadget — only packaged when built with -PincludeFrida=true.
+        // Loaded AFTER AliuHook so method hooks are already installed. On load,
+        // Gadget reads libfrida-gadget.config.so from the same directory and starts
+        // a listen server (127.0.0.1:27042, on_load=resume).
         val fridaLib = File(libDir, "libfrida-gadget.so")
         if (fridaLib.exists()) {
             try {

@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val includeFrida = providers.gradleProperty("includeFrida")
+    .map { it.equals("true", ignoreCase = true) || it == "1" }
+    .getOrElse(false)
+
 android {
     namespace = "com.penumbraos.hook"
     compileSdk = 34
@@ -29,18 +33,28 @@ android {
         }
     }
 
+    sourceSets {
+        getByName("main") {
+            if (includeFrida) {
+                jniLibs.srcDir("frida")
+            }
+        }
+    }
+
     packaging {
         jniLibs {
             // Native libs MUST be extracted to disk so we can System.load() by absolute path
             // from inside the target process (ironman).
             useLegacyPackaging = true
 
-            // Prevent AGP from stripping Frida Gadget files:
-            // - libfrida-gadget.so must not be stripped (breaks the binary)
-            // - libfrida-gadget.config.so is a JSON config file disguised as .so —
-            //   strip would corrupt/fail on it
-            keepDebugSymbols += "**/libfrida-gadget.so"
-            keepDebugSymbols += "**/libfrida-gadget.config.so"
+            if (includeFrida) {
+                // Prevent AGP from stripping Frida Gadget files:
+                // - libfrida-gadget.so must not be stripped (breaks the binary)
+                // - libfrida-gadget.config.so is a JSON config file disguised as .so —
+                //   strip would corrupt/fail on it
+                keepDebugSymbols += "**/libfrida-gadget.so"
+                keepDebugSymbols += "**/libfrida-gadget.config.so"
+            }
         }
     }
 
