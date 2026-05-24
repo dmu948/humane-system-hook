@@ -134,7 +134,8 @@ impl Database {
     pub async fn list_contact_changes_since(
         &self,
         since: i64,
-    ) -> Result<(Vec<ContactRecord>, Vec<(String, i64)>), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(Vec<ContactRecord>, Vec<(String, i64)>), Box<dyn std::error::Error + Send + Sync>>
+    {
         let conn = self.conn.clone();
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().map_err(|e| format!("lock: {e}"))?;
@@ -222,12 +223,17 @@ impl Database {
             let mut conn = conn.lock().map_err(|e| format!("lock: {e}"))?;
             let tx = conn.transaction()?;
             let ts = now_unix_millis();
-            let mut summary = ContactImportSummary { created: 0, updated: 0, unchanged: 0 };
+            let mut summary = ContactImportSummary {
+                created: 0,
+                updated: 0,
+                unchanged: 0,
+            };
 
             for contact in contacts {
                 let mut contact = normalize_contact(contact);
                 if contact.id.is_empty() {
-                    contact.id = find_match_id(&tx, &contact)?.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                    contact.id = find_match_id(&tx, &contact)?
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 }
 
                 let existed = get_contact_inner(&tx, &contact.id)?.is_some();
@@ -285,7 +291,9 @@ fn normalize_contact(mut contact: ContactRecord) -> ContactRecord {
 }
 
 fn clean_optional(value: Option<String>) -> Option<String> {
-    value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    value
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn validate_import(contacts: &[ContactRecord]) -> Result<(), ContactImportError> {
@@ -294,31 +302,50 @@ fn validate_import(contacts: &[ContactRecord]) -> Result<(), ContactImportError>
         let contact = normalize_contact(contact.clone());
         validate_contact(&contact, Some(index))?;
         if !contact.id.is_empty() && !seen_ids.insert(contact.id) {
-            return Err(import_error(format!("duplicate contact id at index {index}")));
+            return Err(import_error(format!(
+                "duplicate contact id at index {index}"
+            )));
         }
     }
     Ok(())
 }
 
-fn validate_contact(contact: &ContactRecord, index: Option<usize>) -> Result<(), ContactImportError> {
-    let prefix = index.map(|i| format!("contact at index {i}")).unwrap_or_else(|| "contact".into());
+fn validate_contact(
+    contact: &ContactRecord,
+    index: Option<usize>,
+) -> Result<(), ContactImportError> {
+    let prefix = index
+        .map(|i| format!("contact at index {i}"))
+        .unwrap_or_else(|| "contact".into());
     let has_name = !contact.name.display_name.is_empty()
         || !contact.name.first_name.is_empty()
         || !contact.name.last_name.is_empty();
     let has_email = contact.emails.iter().any(|email| !email.value.is_empty());
-    let has_phone = contact.phone_numbers.iter().any(|phone| !normalize_phone(&phone.value).is_empty());
+    let has_phone = contact
+        .phone_numbers
+        .iter()
+        .any(|phone| !normalize_phone(&phone.value).is_empty());
 
     if !has_name && !has_email && !has_phone {
-        return Err(import_error(format!("{prefix} must include a name, email, or phone number")));
+        return Err(import_error(format!(
+            "{prefix} must include a name, email, or phone number"
+        )));
     }
-    if contact.emails.iter().any(|email| !email.value.contains('@')) {
+    if contact
+        .emails
+        .iter()
+        .any(|email| !email.value.contains('@'))
+    {
         return Err(import_error(format!("{prefix} contains an invalid email")));
     }
     Ok(())
 }
 
 fn import_error(message: impl Into<String>) -> ContactImportError {
-    ContactImportError { error: "invalid_contacts".into(), message: message.into() }
+    ContactImportError {
+        error: "invalid_contacts".into(),
+        message: message.into(),
+    }
 }
 
 fn list_contacts_inner<P>(
@@ -353,10 +380,15 @@ fn get_contact_inner(
                 internal_favorite, temporary, contact_source, organization, modified_at
          FROM contacts WHERE id = ?1 AND deleted_at IS NULL",
     )?;
-    Ok(stmt.query_row(params![id], |row| contact_from_row(conn, row)).ok())
+    Ok(stmt
+        .query_row(params![id], |row| contact_from_row(conn, row))
+        .ok())
 }
 
-fn contact_from_row(conn: &Connection, row: &rusqlite::Row) -> Result<ContactRecord, rusqlite::Error> {
+fn contact_from_row(
+    conn: &Connection,
+    row: &rusqlite::Row,
+) -> Result<ContactRecord, rusqlite::Error> {
     let id: String = row.get(0)?;
     Ok(ContactRecord {
         id: id.clone(),
@@ -379,14 +411,30 @@ fn contact_from_row(conn: &Connection, row: &rusqlite::Row) -> Result<ContactRec
 }
 
 fn get_emails(conn: &Connection, contact_id: &str) -> Result<Vec<ContactEmail>, rusqlite::Error> {
-    let mut stmt = conn.prepare("SELECT value, type FROM contact_emails WHERE contact_id = ?1 ORDER BY id")?;
-    let rows = stmt.query_map(params![contact_id], |row| Ok(ContactEmail { value: row.get(0)?, r#type: row.get(1)? }))?;
+    let mut stmt =
+        conn.prepare("SELECT value, type FROM contact_emails WHERE contact_id = ?1 ORDER BY id")?;
+    let rows = stmt.query_map(params![contact_id], |row| {
+        Ok(ContactEmail {
+            value: row.get(0)?,
+            r#type: row.get(1)?,
+        })
+    })?;
     rows.collect()
 }
 
-fn get_phones(conn: &Connection, contact_id: &str) -> Result<Vec<ContactPhoneNumber>, rusqlite::Error> {
-    let mut stmt = conn.prepare("SELECT value, type FROM contact_phone_numbers WHERE contact_id = ?1 ORDER BY id")?;
-    let rows = stmt.query_map(params![contact_id], |row| Ok(ContactPhoneNumber { value: row.get(0)?, r#type: row.get(1)? }))?;
+fn get_phones(
+    conn: &Connection,
+    contact_id: &str,
+) -> Result<Vec<ContactPhoneNumber>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT value, type FROM contact_phone_numbers WHERE contact_id = ?1 ORDER BY id",
+    )?;
+    let rows = stmt.query_map(params![contact_id], |row| {
+        Ok(ContactPhoneNumber {
+            value: row.get(0)?,
+            r#type: row.get(1)?,
+        })
+    })?;
     rows.collect()
 }
 
@@ -430,7 +478,10 @@ fn save_contact(
         ],
     )?;
 
-    conn.execute("DELETE FROM contact_emails WHERE contact_id = ?1", params![contact.id])?;
+    conn.execute(
+        "DELETE FROM contact_emails WHERE contact_id = ?1",
+        params![contact.id],
+    )?;
     for email in &contact.emails {
         conn.execute(
             "INSERT INTO contact_emails (contact_id, value, type, normalized) VALUES (?1, ?2, ?3, ?4)",
@@ -438,7 +489,10 @@ fn save_contact(
         )?;
     }
 
-    conn.execute("DELETE FROM contact_phone_numbers WHERE contact_id = ?1", params![contact.id])?;
+    conn.execute(
+        "DELETE FROM contact_phone_numbers WHERE contact_id = ?1",
+        params![contact.id],
+    )?;
     for phone in &contact.phone_numbers {
         conn.execute(
             "INSERT INTO contact_phone_numbers (contact_id, value, type, normalized) VALUES (?1, ?2, ?3, ?4)",
@@ -455,7 +509,8 @@ fn find_match_id(
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
     for phone in &contact.phone_numbers {
         let normalized = normalize_phone(&phone.value);
-        if let Some(id) = find_contact_id_by_normalized(conn, "contact_phone_numbers", &normalized)? {
+        if let Some(id) = find_contact_id_by_normalized(conn, "contact_phone_numbers", &normalized)?
+        {
             return Ok(Some(id));
         }
     }
@@ -478,7 +533,9 @@ fn find_contact_id_by_normalized(
          JOIN contacts ON contacts.id = {table}.contact_id
          WHERE normalized = ?1 AND contacts.deleted_at IS NULL LIMIT 1"
     );
-    Ok(conn.query_row(&sql, params![normalized], |row| row.get(0)).ok())
+    Ok(conn
+        .query_row(&sql, params![normalized], |row| row.get(0))
+        .ok())
 }
 
 fn list_deleted_contacts_since(

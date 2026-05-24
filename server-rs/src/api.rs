@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn};
 
-use crate::config::Config;
+use crate::config::{Config, LlmProvider};
 use crate::db::Database;
 use crate::esim::{
     CellularStatusError, DeviceToggleError, EsimBridge, EsimRequestError, EsimRequestRecord,
@@ -221,7 +221,7 @@ struct DeviceInfo {
     display_name: String,
     http_bind_addr: String,
     grpc_bind_addr: String,
-    llm_provider: String,
+    llm_provider: LlmProvider,
     llm_model: String,
 }
 
@@ -235,7 +235,7 @@ async fn get_device(State(state): State<ApiState>) -> Json<DeviceInfo> {
             .unwrap_or_else(|| "Penumbra".into()),
         http_bind_addr: config.server.http_bind_addr.clone(),
         grpc_bind_addr: config.server.grpc_bind_addr.clone(),
-        llm_provider: config.llm.provider.clone(),
+        llm_provider: config.llm.provider,
         llm_model: config.llm.model.clone(),
     })
 }
@@ -253,7 +253,7 @@ struct SettingsResponse {
 
 #[derive(Serialize)]
 struct LlmSettingsResponse {
-    provider: String,
+    provider: LlmProvider,
     model: String,
     has_api_key: bool,
     base_url: Option<String>,
@@ -290,7 +290,7 @@ async fn get_settings(State(state): State<ApiState>) -> Json<SettingsResponse> {
     let config = state.shared_config.read().await;
     Json(SettingsResponse {
         llm: LlmSettingsResponse {
-            provider: config.llm.provider.clone(),
+            provider: config.llm.provider,
             model: config.llm.model.clone(),
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
@@ -652,7 +652,7 @@ struct UpdateSettingsRequest {
 
 #[derive(Deserialize)]
 struct UpdateLlmSettings {
-    provider: Option<String>,
+    provider: Option<LlmProvider>,
     model: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
@@ -722,13 +722,12 @@ async fn update_settings(
     let mut config = state.shared_config.write().await;
 
     let mut llm_changed = false;
-    let mut system_prompt_changed = false;
 
     // --- LLM changes ---
     if let Some(ref llm) = body.llm {
-        if let Some(ref provider) = llm.provider {
-            if *provider != config.llm.provider {
-                config.llm.provider = provider.clone();
+        if let Some(provider) = llm.provider {
+            if provider != config.llm.provider {
+                config.llm.provider = provider;
                 llm_changed = true;
             }
         }
@@ -770,7 +769,6 @@ async fn update_settings(
         if let Some(ref system_prompt) = server.system_prompt {
             if *system_prompt != config.server.system_prompt {
                 config.server.system_prompt = system_prompt.clone();
-                system_prompt_changed = true;
             }
         }
         if let Some(ref display_name) = server.display_name {
@@ -810,15 +808,11 @@ async fn update_settings(
     }
 
     // --- Validate: try building a new LLM agent before committing ---
-    if llm_changed || system_prompt_changed {
+    if llm_changed {
         // Build the agent (sync) and convert the error to String immediately
         // so that Box<dyn Error> (which isn't Send) doesn't live across .await.
-        let agent_result = LlmAgent::from_config(
-            &config.llm,
-            &config.server.system_prompt,
-            state.http_client.clone(),
-        )
-        .map_err(|e| e.to_string());
+        let agent_result = LlmAgent::from_config(&config.llm, state.http_client.clone())
+            .map_err(|e| e.to_string());
 
         match agent_result {
             Ok(new_agent) => {
@@ -865,7 +859,7 @@ async fn update_settings(
     // Build response from the updated config.
     let settings = SettingsResponse {
         llm: LlmSettingsResponse {
-            provider: config.llm.provider.clone(),
+            provider: config.llm.provider,
             model: config.llm.model.clone(),
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
@@ -927,7 +921,7 @@ fn persist_config_inner(
     // --- [llm] ---
     {
         let table = ensure_table(&mut doc, "llm");
-        table["provider"] = toml_edit::value(&config.llm.provider);
+        table["provider"] = toml_edit::value(config.llm.provider.as_str());
         table["model"] = toml_edit::value(&config.llm.model);
         match &config.llm.api_key {
             Some(key) => table["api_key"] = toml_edit::value(key),

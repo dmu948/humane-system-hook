@@ -13,6 +13,7 @@ mod llm;
 mod nearby;
 mod services;
 mod storage;
+mod synapse;
 
 /// Generated protobuf/gRPC modules.
 mod proto {
@@ -284,11 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_client = reqwest::Client::builder().tls_backend_native().build()?;
 
     // Build LLM agent (behind RwLock for hot-reload)
-    let agent = Arc::new(LlmAgent::from_config(
-        &config.llm,
-        &config.server.system_prompt,
-        http_client.clone(),
-    )?);
+    let agent = Arc::new(LlmAgent::from_config(&config.llm, http_client.clone())?);
     let shared_agent = Arc::new(RwLock::new(agent));
 
     // Resolve PirateWeather API key for weather service (behind RwLock for hot-reload)
@@ -320,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grpc_bind_addr: std::net::SocketAddr = config.server.grpc_bind_addr.parse()?;
     let public_addr = config.server.public_addr.clone();
 
-    let provider_label = config.llm.provider.to_uppercase();
+    let provider_label = config.llm.provider.as_str().to_uppercase();
     info!("============================================================");
     info!("Humane HTTP server listening on {}", http_bind_addr);
     info!(
@@ -386,6 +383,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build the gRPC service stack as a native axum::Router.
     let grpc_router = DedupRouter::new(AiBusServiceServer::new(AiBusServiceImpl {
         agent: shared_agent.clone(),
+        config: shared_config.clone(),
         pirate_weather_api_key: shared_weather_key.clone(),
         nearby_client: nearby::NearbyClient::new(http_client.clone()),
         http_client: http_client.clone(),

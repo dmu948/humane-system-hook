@@ -19,11 +19,41 @@ pub struct Config {
     pub logging: LoggingConfig,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmProvider {
+    Echo,
+    Gemini,
+    Anthropic,
+    OpenAi,
+    #[serde(rename = "openai-compatible")]
+    OpenAiCompatible,
+}
+
+impl LlmProvider {
+    // TODO: This may be removable based on Serde's serializer
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Echo => "echo",
+            Self::Gemini => "gemini",
+            Self::Anthropic => "anthropic",
+            Self::OpenAi => "openai",
+            Self::OpenAiCompatible => "openai-compatible",
+        }
+    }
+}
+
+impl std::fmt::Display for LlmProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LlmConfig {
     /// Provider name: "gemini", "anthropic", "openai", "openai-compatible", "echo"
     #[serde(default = "default_provider")]
-    pub provider: String,
+    pub provider: LlmProvider,
 
     /// Model ID for the chosen provider (e.g. "gemini-2.5-flash")
     #[serde(default = "default_model")]
@@ -127,8 +157,8 @@ impl Default for LoggingConfig {
 
 // --- defaults ---
 
-fn default_provider() -> String {
-    "echo".into()
+fn default_provider() -> LlmProvider {
+    LlmProvider::Echo
 }
 
 fn default_model() -> String {
@@ -245,11 +275,11 @@ impl Config {
 impl LlmConfig {
     /// Resolve the API key
     pub fn resolve_api_key(&self) -> Option<String> {
-        let env_var = match self.provider.as_str() {
-            "gemini" => "GEMINI_API_KEY",
-            "anthropic" => "ANTHROPIC_API_KEY",
-            "openai" | "openai-compatible" => "OPENAI_API_KEY",
-            _ => return None,
+        let env_var = match self.provider {
+            LlmProvider::Gemini => "GEMINI_API_KEY",
+            LlmProvider::Anthropic => "ANTHROPIC_API_KEY",
+            LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => "OPENAI_API_KEY",
+            LlmProvider::Echo => return None,
         };
 
         if let Ok(key) = std::env::var(env_var).or_else(|_| self.api_key.clone().ok_or(())) {
