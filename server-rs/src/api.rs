@@ -240,6 +240,15 @@ struct LlmSettingsResponse {
     has_api_key: bool,
     base_url: Option<String>,
     gemini_google_search: bool,
+    tools: LlmToolsSettingsResponse,
+}
+
+#[derive(Serialize)]
+struct LlmToolsSettingsResponse {
+    enabled: bool,
+    dynamic_tool_count: usize,
+    max_tool_turns: usize,
+    tool_concurrency: usize,
 }
 
 #[derive(Serialize)]
@@ -283,6 +292,12 @@ async fn get_settings(State(state): State<ApiState>) -> Json<SettingsResponse> {
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
             gemini_google_search: config.llm.gemini_google_search,
+            tools: LlmToolsSettingsResponse {
+                enabled: config.llm.tools.enabled,
+                dynamic_tool_count: config.llm.tools.dynamic_tool_count,
+                max_tool_turns: config.llm.tools.max_tool_turns,
+                tool_concurrency: config.llm.tools.tool_concurrency,
+            },
         },
         server: ServerSettingsResponse {
             http_bind_addr: config.server.http_bind_addr.clone(),
@@ -650,6 +665,15 @@ struct UpdateLlmSettings {
     api_key: Option<String>,
     base_url: Option<String>,
     gemini_google_search: Option<bool>,
+    tools: Option<UpdateLlmToolsSettings>,
+}
+
+#[derive(Deserialize)]
+struct UpdateLlmToolsSettings {
+    enabled: Option<bool>,
+    dynamic_tool_count: Option<usize>,
+    max_tool_turns: Option<usize>,
+    tool_concurrency: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -782,6 +806,32 @@ async fn update_settings(
                 llm_changed = true;
             }
         }
+        if let Some(ref tools) = llm.tools {
+            if let Some(enabled) = tools.enabled {
+                if enabled != config.llm.tools.enabled {
+                    config.llm.tools.enabled = enabled;
+                    llm_changed = true;
+                }
+            }
+            if let Some(dynamic_tool_count) = tools.dynamic_tool_count {
+                if dynamic_tool_count != config.llm.tools.dynamic_tool_count {
+                    config.llm.tools.dynamic_tool_count = dynamic_tool_count;
+                    llm_changed = true;
+                }
+            }
+            if let Some(max_tool_turns) = tools.max_tool_turns {
+                if max_tool_turns != config.llm.tools.max_tool_turns {
+                    config.llm.tools.max_tool_turns = max_tool_turns;
+                    llm_changed = true;
+                }
+            }
+            if let Some(tool_concurrency) = tools.tool_concurrency {
+                if tool_concurrency != config.llm.tools.tool_concurrency {
+                    config.llm.tools.tool_concurrency = tool_concurrency;
+                    llm_changed = true;
+                }
+            }
+        }
     }
 
     // --- Server changes ---
@@ -841,13 +891,12 @@ async fn update_settings(
 
     // --- Validate: try building a new LLM agent before committing ---
     if llm_changed {
-        // Build the agent (sync) and convert the error to String immediately
-        // so that Box<dyn Error> (which isn't Send) doesn't live across .await.
         let agent_result = LlmAgent::from_config(
             &config.llm,
             state.http_client.clone(),
             state.llm_request_logger.clone(),
         )
+        .await
         .map_err(|e| e.to_string());
 
         match agent_result {
@@ -898,6 +947,12 @@ async fn update_settings(
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
             gemini_google_search: config.llm.gemini_google_search,
+            tools: LlmToolsSettingsResponse {
+                enabled: config.llm.tools.enabled,
+                dynamic_tool_count: config.llm.tools.dynamic_tool_count,
+                max_tool_turns: config.llm.tools.max_tool_turns,
+                tool_concurrency: config.llm.tools.tool_concurrency,
+            },
         },
         server: ServerSettingsResponse {
             http_bind_addr: config.server.http_bind_addr.clone(),
@@ -978,6 +1033,27 @@ fn persist_config_inner(
             }
         }
         table["gemini_google_search"] = toml_edit::value(config.llm.gemini_google_search);
+    }
+
+    // --- [llm.tools] ---
+    {
+        if doc["llm"].as_table_mut().is_none() {
+            doc["llm"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        if doc["llm"]["tools"].as_table_mut().is_none() {
+            doc["llm"]["tools"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        let table = &mut doc["llm"]["tools"];
+        table["enabled"] = toml_edit::value(config.llm.tools.enabled);
+        table["dynamic_tool_count"] = toml_edit::value(config.llm.tools.dynamic_tool_count as i64);
+        table["max_tool_turns"] = toml_edit::value(config.llm.tools.max_tool_turns as i64);
+        table["tool_concurrency"] = toml_edit::value(config.llm.tools.tool_concurrency as i64);
+
+        if let Some(t) = table.as_table_mut() {
+            t.remove("embedding_model");
+        }
     }
 
     // --- [server] ---

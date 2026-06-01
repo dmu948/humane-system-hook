@@ -6,6 +6,7 @@ mod providers;
 mod request;
 mod request_log;
 mod rig_backend;
+pub mod tools;
 
 pub use agent::LlmAgent;
 pub use prompt::validate_prompt_template;

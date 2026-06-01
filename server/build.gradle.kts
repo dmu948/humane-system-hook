@@ -116,4 +116,5 @@ tasks.named("preBuild") {
 
 dependencies {
     implementation("org.jmdns:jmdns:3.6.3")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.26.0")
 }

@@ -24,7 +24,8 @@ serde_json = "1"
 handlebars = "6"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 async-stream = "0.3"
-rig-core = { version = "0.34", default-features = false, features = ["reqwest", "native-tls"] }
+rig = { version = "0.37", default-features = false, features = ["reqwest", "native-tls"], package = "rig-core" }
+rig-fastembed = { version = "0.4", default-features = false }
 toml = "0.8"
 toml_edit = "0.22"
 futures = "0.3"
@@ -43,12 +44,22 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "for
 rusqlite = { version = "0.32", features = ["bundled"] }
 dotenvy = "0.15"
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+fastembed = { version = "=4.9.1", default-features = false, features = ["ort-download-binaries"] }
+
 [target.'cfg(target_os = "android")'.dependencies]
 # Android requires openssl to be embedded
 openssl = { version = "*", features = ["vendored"] }
+fastembed = { version = "=4.9.1", default-features = false, features = ["ort-load-dynamic"] }
 
 [build-dependencies]
 tonic-prost-build = "0.14"
+hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustls-tls"] }
+sha2 = "0.11"
+hex = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
+
+[patch.crates-io]
+rig-core = { git = "https://github.com/agg23/rig", branch = "gemini-server-tool-passthrough" }

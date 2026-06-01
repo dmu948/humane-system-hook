@@ -5,6 +5,13 @@ model = "gemini-2.5-flash"   # model ID for the provider
 # base_url = "..."           # optional, for openai-compatible providers
 # gemini_google_search = true # enable built-in Google Search grounding (Gemini only)
 
+[llm.tools]
+enabled = true
+# Tool embeddings use the model embedded into the server binary at build time.
+dynamic_tool_count = 8
+max_tool_turns = 5
+tool_concurrency = 2
+
 [server]
 port = 9090
 public_addr = "..."          # optional, reachable address of the server

@@ -1,10 +1,15 @@
-use std::sync::Arc;
 use std::time::Instant;
 
-use rig::agent::{Agent, PromptHook};
+use std::sync::Arc;
+
+use reqwest::Client as HttpClient;
+use rig::agent::{Agent, AgentBuilder, PromptHook};
+use rig::client::CompletionClient;
 use rig::completion::CompletionModel;
-use rig::completion::{Chat, Prompt};
+use rig::completion::{Message, Prompt};
 use tracing::error;
+
+use crate::config::LlmConfig;
 
 use super::backend::{LlmBackend, LlmFuture};
 use super::error::friendly_error_message;
@@ -12,6 +17,7 @@ use super::prompt::PromptBuilder;
 use super::providers::vision_message;
 use super::request::LlmChatRequest;
 use super::request_log::LlmRequestLogger;
+use super::tools::registry::LlmToolContext;
 
 /// Shared LLM backend for providers
 pub struct RigBackend<M>
@@ -22,6 +28,8 @@ where
     provider_label: &'static str,
     agent: Agent<M>,
     request_logger: LlmRequestLogger,
+    max_tool_turns: usize,
+    tool_concurrency: usize,
 }
 
 impl<M> RigBackend<M>
@@ -29,24 +37,43 @@ where
     M: CompletionModel + 'static,
     (): PromptHook<M> + 'static,
 {
-    pub fn new(
+    pub async fn from_client<C, F>(
         provider_label: &'static str,
-        agent: Agent<M>,
+        client: C,
         request_logger: LlmRequestLogger,
-    ) -> Self {
-        Self {
+        config: &LlmConfig,
+        http_client: HttpClient,
+        customize_builder: F,
+    ) -> Result<Arc<dyn LlmBackend>, Box<dyn std::error::Error + Send + Sync>>
+    where
+        C: CompletionClient<CompletionModel = M>,
+        F: FnOnce(AgentBuilder<M>) -> AgentBuilder<M>,
+    {
+        let builder = customize_builder(client.agent(&config.model));
+
+        let tool_resources = if config.tools.enabled {
+            let tool_context = LlmToolContext::new(http_client);
+            tool_context.build_tool_resources(config).await.map_err(
+                |err| -> Box<dyn std::error::Error + Send + Sync> {
+                    std::io::Error::new(std::io::ErrorKind::Other, err).into()
+                },
+            )?
+        } else {
+            None
+        };
+
+        let agent = match tool_resources {
+            Some(resources) => resources.apply(builder).build(),
+            None => builder.build(),
+        };
+
+        Ok(Arc::new(Self {
             provider_label,
             agent,
             request_logger,
-        }
-    }
-
-    pub fn arc(
-        provider_label: &'static str,
-        agent: Agent<M>,
-        request_logger: LlmRequestLogger,
-    ) -> Arc<dyn LlmBackend> {
-        Arc::new(Self::new(provider_label, agent, request_logger))
+            max_tool_turns: config.tools.max_tool_turns,
+            tool_concurrency: config.tools.tool_concurrency,
+        }))
     }
 }
 
@@ -62,7 +89,13 @@ where
             let history = PromptBuilder::build_chat_history(&request);
             let started = Instant::now();
 
-            let result = self.agent.chat(utterance.clone(), history.clone()).await;
+            let result = self
+                .agent
+                .prompt(Message::user(utterance.clone()))
+                .with_history(history.clone())
+                .max_turns(self.max_tool_turns)
+                .with_tool_concurrency(self.tool_concurrency.max(1))
+                .await;
             let latency_ms = started.elapsed().as_millis();
 
             let result = result.map_err(|e| {

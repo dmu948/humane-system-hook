@@ -1,49 +1,19 @@
 //! Nearby place search backed by the OpenStreetMap Overpass API.
 
-use crate::proto::aibus::{Location, NearbyPlace};
-use tracing::warn;
-
-const OVERPASS_API_URL: &str = "https://overpass-api.de/api/interpreter";
-
-#[derive(Debug)]
-pub enum NearbyError {
-    /// The HTTP request to the Overpass API failed.
-    HttpRequest(reqwest::Error),
-    /// The Overpass response could not be parsed as JSON.
-    ParseResponse(reqwest::Error),
-}
-
-impl std::fmt::Display for NearbyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::HttpRequest(e) => write!(f, "Overpass HTTP request failed: {e}"),
-            Self::ParseResponse(e) => write!(f, "Overpass response parse failed: {e}"),
-        }
-    }
-}
-
-impl From<NearbyError> for tonic::Status {
-    fn from(err: NearbyError) -> Self {
-        match &err {
-            NearbyError::HttpRequest(e) => {
-                warn!(error = %e, "Overpass HTTP request failed");
-                tonic::Status::unavailable(err.to_string())
-            }
-            NearbyError::ParseResponse(e) => {
-                warn!(error = %e, "Overpass response parse failed");
-                tonic::Status::internal(err.to_string())
-            }
-        }
-    }
-}
+use crate::{
+    external::osm::{OsmClient, OsmError},
+    proto::aibus::{Location, NearbyPlace},
+};
 
 pub struct NearbyClient {
-    http: reqwest::Client,
+    osm: OsmClient,
 }
 
 impl NearbyClient {
-    pub fn new(http: reqwest::Client) -> Self {
-        Self { http }
+    pub fn new(http_client: reqwest::Client) -> Self {
+        Self {
+            osm: OsmClient::new(http_client),
+        }
     }
 
     /// Search for nearby places using the Overpass API.
@@ -55,19 +25,10 @@ impl NearbyClient {
         lon: f64,
         radius: f64,
         query: &str,
-    ) -> Result<Vec<NearbyPlace>, NearbyError> {
+    ) -> Result<Vec<NearbyPlace>, OsmError> {
         let overpass_ql = build_overpass_query(lat, lon, radius, query);
 
-        let json: serde_json::Value = self
-            .http
-            .post(OVERPASS_API_URL)
-            .form(&[("data", &overpass_ql)])
-            .send()
-            .await
-            .map_err(NearbyError::HttpRequest)?
-            .json()
-            .await
-            .map_err(NearbyError::ParseResponse)?;
+        let json = self.osm.overpass(&overpass_ql).await?;
 
         let elements = json
             .get("elements")

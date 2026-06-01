@@ -71,6 +71,29 @@ pub struct LlmConfig {
     /// No effect for other providers.
     #[serde(default)]
     pub gemini_google_search: bool,
+
+    /// Server-local native LLM tools.
+    #[serde(default)]
+    pub tools: LlmToolsConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct LlmToolsConfig {
+    /// Enable server-local native tool calling.
+    #[serde(default = "default_llm_tools_enabled")]
+    pub enabled: bool,
+
+    /// Number of dynamically retrieved tool schemas to send to the model.
+    #[serde(default = "default_dynamic_tool_count")]
+    pub dynamic_tool_count: usize,
+
+    /// Maximum model/tool loop turns per request.
+    #[serde(default = "default_max_tool_turns")]
+    pub max_tool_turns: usize,
+
+    /// Maximum concurrent tool calls per tool turn.
+    #[serde(default = "default_tool_concurrency")]
+    pub tool_concurrency: usize,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -178,6 +201,22 @@ fn default_model() -> String {
     "gemini-2.5-flash".into()
 }
 
+fn default_llm_tools_enabled() -> bool {
+    true
+}
+
+fn default_dynamic_tool_count() -> usize {
+    8
+}
+
+fn default_max_tool_turns() -> usize {
+    5
+}
+
+fn default_tool_concurrency() -> usize {
+    2
+}
+
 fn default_http_bind_addr() -> String {
     "0.0.0.0:8080".into()
 }
@@ -221,6 +260,18 @@ impl Default for LlmConfig {
             api_key: None,
             base_url: None,
             gemini_google_search: false,
+            tools: LlmToolsConfig::default(),
+        }
+    }
+}
+
+impl Default for LlmToolsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_llm_tools_enabled(),
+            dynamic_tool_count: default_dynamic_tool_count(),
+            max_tool_turns: default_max_tool_turns(),
+            tool_concurrency: default_tool_concurrency(),
         }
     }
 }
@@ -376,8 +427,30 @@ mod tests {
         let config = Config::load(&dir.path().join("config.toml")).unwrap();
 
         assert_eq!(config.llm.provider, LlmProvider::Echo);
+        assert_eq!(config.llm.tools, LlmToolsConfig::default());
         assert_eq!(config.server.http_bind_addr, default_http_bind_addr());
         assert_eq!(config.storage.media_dir, default_media_dir());
+    }
+
+    #[test]
+    fn loads_partial_llm_tools_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_config(
+            &dir,
+            "custom.toml",
+            r#"
+[llm.tools]
+enabled = false
+max_tool_turns = 3
+"#,
+        );
+
+        let config = Config::load(&path).unwrap();
+
+        assert!(!config.llm.tools.enabled);
+        assert_eq!(config.llm.tools.max_tool_turns, 3);
+        assert_eq!(config.llm.tools.dynamic_tool_count, default_dynamic_tool_count());
+        assert_eq!(config.llm.tools.tool_concurrency, default_tool_concurrency());
     }
 
     #[test]

@@ -47,7 +47,11 @@ impl NearbySearchHandler {
         let nearby_places = self
             .nearby_client
             .search(lat, lon, radius, &nearby_req.text_query)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Overpass nearby search failed");
+                Status::unavailable(format!("nearby search request failed: {e}"))
+            })?;
 
         let result_count = nearby_places.len();
         let nearby_response = NearbySearchResponse {

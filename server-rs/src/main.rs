@@ -9,6 +9,7 @@ mod config;
 mod db;
 mod dedup;
 mod esim;
+mod external;
 mod llm;
 mod nearby;
 mod services;
@@ -296,11 +297,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let llm_request_logger = LlmRequestLogger::new(llm_request_log_dir);
 
     // Build LLM agent (behind RwLock for hot-reload)
-    let agent = Arc::new(LlmAgent::from_config(
-        &config.llm,
-        http_client.clone(),
-        llm_request_logger.clone(),
-    )?);
+    let agent = Arc::new(
+        LlmAgent::from_config(&config.llm, http_client.clone(), llm_request_logger.clone())
+            .await
+            .map_err(|err| -> Box<dyn std::error::Error> { err })?,
+    );
     let shared_agent = Arc::new(RwLock::new(agent));
 
     // Resolve PirateWeather API key for weather service (behind RwLock for hot-reload)

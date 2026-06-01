@@ -18,6 +18,7 @@ object NativeBridge {
     fun start(context: Context, configPath: String): Process {
         val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
         val executable = File(nativeLibDir, EXECUTABLE_NAME)
+        val onnxRuntime = File(nativeLibDir, "libonnxruntime.so")
 
         require(executable.isFile) {
             "Server executable not found at ${executable.absolutePath}"
@@ -25,13 +26,15 @@ object NativeBridge {
 
         Log.w(
             TAG,
-            "Launching server executable: path=${executable.absolutePath}, canExecute=${executable.canExecute()}, config=$configPath",
+            "Launching server executable: path=${executable.absolutePath}, canExecute=${executable.canExecute()}, config=$configPath, onnxRuntime=${onnxRuntime.absolutePath}, onnxRuntimeExists=${onnxRuntime.isFile}",
         )
 
-        val process = ProcessBuilder(executable.absolutePath, "--config", configPath)
+        val processBuilder = ProcessBuilder(executable.absolutePath, "--config", configPath)
             .directory(File(configPath).parentFile)
             .redirectErrorStream(true)
-            .start()
+        processBuilder.environment()["ORT_DYLIB_PATH"] = onnxRuntime.absolutePath
+
+        val process = processBuilder.start()
 
         process.outputStream.close()
 
