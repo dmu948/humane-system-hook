@@ -42,7 +42,7 @@ impl WeatherTool {
 }
 
 impl Tool for WeatherTool {
-    const NAME: &'static str = "Weather";
+    const NAME: &'static str = "weather";
 
     type Error = WeatherError;
     type Args = WeatherArgs;
