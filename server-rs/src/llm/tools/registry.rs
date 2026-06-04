@@ -8,16 +8,19 @@ use rig::vector_store::in_memory_store::{InMemoryVectorIndex, InMemoryVectorStor
 use tracing::{info, warn};
 
 use crate::config::{LlmConfig, ResolvedConfig};
+use crate::external::osm::OsmClient;
 use crate::external::weather::WeatherClient;
 use crate::nearby::NearbyClient;
 
 use super::fastembed;
 use super::nearby_search::NearbySearchTool;
+use super::reverse_geocode::ReverseGeocodeTool;
 use super::weather::WeatherTool;
 
 #[derive(Clone)]
 pub struct LlmToolContext {
     pub nearby_client: Arc<NearbyClient>,
+    pub osm: OsmClient,
     pub weather: WeatherClient,
 }
 
@@ -25,6 +28,7 @@ impl LlmToolContext {
     pub fn new(http_client: reqwest::Client, config: &ResolvedConfig) -> Self {
         Self {
             nearby_client: Arc::new(NearbyClient::new(http_client.clone())),
+            osm: OsmClient::new(http_client.clone()),
             weather: WeatherClient::new(http_client, config.pirate_weather_api_key.clone()),
         }
     }
@@ -47,8 +51,9 @@ impl LlmToolContext {
             return Ok(None);
         }
 
-        let builder =
-            ToolSet::builder().dynamic_tool(NearbySearchTool::new(self.nearby_client.clone()));
+        let builder = ToolSet::builder()
+            .dynamic_tool(NearbySearchTool::new(self.nearby_client.clone()))
+            .dynamic_tool(ReverseGeocodeTool::new(self.osm.clone()));
 
         let builder = if self.weather.is_configured() {
             builder.dynamic_tool(WeatherTool::new(self.weather.clone()))

@@ -12,8 +12,10 @@ pub struct WeatherHandler {
 }
 
 impl WeatherHandler {
-    pub fn new(weather: WeatherClient) -> Self {
-        Self { weather }
+    pub fn new(http_client: reqwest::Client, api_key: Option<String>) -> Self {
+        Self {
+            weather: WeatherClient::new(http_client, api_key),
+        }
     }
 
     pub async fn encrypted_weather(

@@ -33,7 +33,7 @@ impl ReverseGeocodeHandler {
             ">>> EncryptedReverseGeocode"
         );
 
-        let json = self
+        let result = self
             .osm
             .reverse_geocode(location.latitude.into(), location.longitude.into())
             .await
@@ -42,22 +42,13 @@ impl ReverseGeocodeHandler {
                 Status::unavailable(format!("reverse geocode request failed: {e}"))
             })?;
 
-        let address = json.get("address").unwrap_or(&serde_json::Value::Null);
-
-        let field = |keys: &[&str]| -> String {
-            keys.iter()
-                .find_map(|key| address.get(*key).and_then(|value| value.as_str()))
-                .unwrap_or("")
-                .to_string()
-        };
-
         let reverse_response = ReverseGeocodeResponse {
-            street_number: field(&["house_number"]),
-            street_name: field(&["road", "pedestrian", "footway", "path"]),
-            municipality: field(&["city", "town", "village", "hamlet", "municipality"]),
-            country_subdivision: field(&["state", "region", "county"]),
-            country: field(&["country"]),
-            postal_code: field(&["postcode"]),
+            street_number: result.street_number.unwrap_or_default(),
+            street_name: result.street_name.unwrap_or_default(),
+            municipality: result.municipality.unwrap_or_default(),
+            country_subdivision: result.country_subdivision.unwrap_or_default(),
+            country: result.country.unwrap_or_default(),
+            postal_code: result.postal_code.unwrap_or_default(),
         };
 
         Ok(Response::new(EncryptedReverseGeocodeResponse {

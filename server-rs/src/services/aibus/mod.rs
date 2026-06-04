@@ -15,6 +15,7 @@ use self::vision::VisionHandler;
 use self::weather::WeatherHandler;
 use crate::config::ResolvedConfig;
 use crate::db::Database;
+use crate::external::osm::OsmClient;
 use crate::external::weather::WeatherClient;
 use crate::llm::LlmAgent;
 use crate::nearby::NearbyClient;
@@ -355,13 +356,13 @@ impl AiBusHanders {
         http_client: reqwest::Client,
         db: Database,
     ) -> Self {
-        let weather =
-            WeatherClient::new(http_client.clone(), config.pirate_weather_api_key.clone());
-
         Self {
             understand: UnderstandHandler::new(agent.clone(), config.clone(), db.clone()),
             vision: VisionHandler::new(agent.clone()),
-            weather: WeatherHandler::new(weather),
+            weather: WeatherHandler::new(
+                http_client.clone(),
+                config.pirate_weather_api_key.clone(),
+            ),
             nearby: NearbySearchHandler::new(nearby_client),
             reverse_geocode: ReverseGeocodeHandler::new(http_client.clone()),
             completion: CompletionHandler::new(agent.clone(), config.clone()),
