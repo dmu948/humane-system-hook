@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object ServerRuntime {
 
     private const val TAG = "PenumbraServer"
-    private const val RESTART_DELAY_MS = 3_000L
+    private const val RESTART_DELAY_MS = 10_000L
     private const val IDLE_POLL_MS = 500L
 
     private val desiredRunning = AtomicBoolean(false)

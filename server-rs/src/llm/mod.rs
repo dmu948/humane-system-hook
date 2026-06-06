@@ -1,6 +1,7 @@
 mod agent;
 mod backend;
 mod error;
+pub mod memory;
 mod prompt;
 mod providers;
 mod request;

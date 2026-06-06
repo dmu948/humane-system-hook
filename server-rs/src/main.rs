@@ -100,6 +100,7 @@ use services::wifi_config::WifiConfigServiceImpl;
 use config::{Config, ResolvedConfig};
 use db::Database;
 use dedup::DedupRouter;
+use llm::memory::MemoryService;
 use llm::{LlmAgent, LlmRequestLogger};
 use storage::MediaStore;
 use tower_http::trace::TraceLayer;
@@ -219,8 +220,7 @@ async fn log_grpc_unimplemented(
 
 // ─── main ───────────────────────────────────────────────────────────
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Locate config file: check --config <path>, then ./config.toml, then next to binary
     let config_path = std::env::args()
         .position(|a| a == "--config")
@@ -228,6 +228,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("config.toml"));
 
+    #[cfg(target_os = "android")]
+    {
+        let config_dir = config_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| FsPath::new("."));
+        let tmp_dir = config_dir.join("tmp");
+        std::fs::create_dir_all(&tmp_dir)?;
+
+        // We need to set the envvar before Tokio starts
+        unsafe {
+            std::env::set_var("TMPDIR", &tmp_dir);
+        }
+    }
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async_main(config_path))
+}
+
+async fn async_main(config_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     load_dotenv(&config_path);
 
     let config = Config::load(&config_path)?;
@@ -299,11 +321,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resolved_config = Arc::new(ResolvedConfig::resolve(config.clone()));
     let has_weather_key = resolved_config.pirate_weather_api_key.is_some();
 
+    let memory = if config.llm.memory.enabled {
+        Some(
+            MemoryService::open(config.llm.memory.clone())
+                .await
+                .map_err(|err| format!("failed to initialize assistant memory: {err}"))?,
+        )
+    } else {
+        None
+    };
+
     let agent = Arc::new(
         LlmAgent::from_config(
             &resolved_config,
             http_client.clone(),
             llm_request_logger.clone(),
+            memory.clone(),
         )
         .await
         .map_err(|err| -> Box<dyn std::error::Error> { err })?,
@@ -351,6 +384,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("Weather: not configured");
     }
+    if memory.is_some() {
+        info!("Memory: configured");
+    } else {
+        info!("Memory: disabled");
+    }
     info!(
         "Storage: media_dir={}, db={}",
         config.storage.media_dir, config.storage.db_path
@@ -372,6 +410,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         nearby::NearbyClient::new(http_client.clone()),
         http_client.clone(),
         database.clone(),
+        memory.clone(),
     );
 
     // Build the gRPC service stack as a native axum::Router.

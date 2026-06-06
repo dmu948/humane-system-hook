@@ -6,6 +6,7 @@ use tracing::info;
 use crate::config::ResolvedConfig;
 
 use super::backend::LlmBackend;
+use super::memory::MemoryService;
 use super::providers;
 use super::request::LlmChatRequest;
 use super::request_log::LlmRequestLogger;
@@ -21,11 +22,12 @@ impl LlmAgent {
         config: &ResolvedConfig,
         http_client: HttpClient,
         request_logger: LlmRequestLogger,
+        memory: Option<MemoryService>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let provider = config.config.llm.provider;
         info!(provider = %provider, model = %config.config.llm.model, "constructing LLM agent");
 
-        let backend = providers::build_backend(config, http_client, request_logger).await?;
+        let backend = providers::build_backend(config, http_client, request_logger, memory).await?;
 
         Ok(Self { backend })
     }

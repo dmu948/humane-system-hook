@@ -12,6 +12,15 @@ dynamic_tool_count = 8
 max_tool_turns = 5
 tool_concurrency = 2
 
+[llm.memory]
+enabled = true
+path = "./data/assistant-memory.mv2"
+top_k = 5
+snippet_chars = 500
+max_context_chars = 1500
+auto_retrieve = true
+auto_remember = false
+
 [server]
 port = 9090
 public_addr = "..."          # optional, reachable address of the server

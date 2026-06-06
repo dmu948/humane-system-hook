@@ -6,6 +6,7 @@ use tracing::{info, warn};
 
 use super::envelope::unwrap_plaintext_data;
 use crate::config::ResolvedConfig;
+use crate::llm::memory::MemoryService;
 use crate::llm::{LlmAgent, LlmChatRequest, PromptTemplateContext, PromptTemplates};
 use crate::proto::aibus::*;
 use crate::proto::common::encryption::EncryptedData;
@@ -13,11 +14,34 @@ use crate::proto::common::encryption::EncryptedData;
 pub struct CompletionHandler {
     agent: Arc<LlmAgent>,
     config: Arc<ResolvedConfig>,
+    memory: Option<MemoryService>,
 }
 
 impl CompletionHandler {
-    pub fn new(agent: Arc<LlmAgent>, config: Arc<ResolvedConfig>) -> Self {
-        Self { agent, config }
+    pub fn new(
+        agent: Arc<LlmAgent>,
+        config: Arc<ResolvedConfig>,
+        memory: Option<MemoryService>,
+    ) -> Self {
+        Self {
+            agent,
+            config,
+            memory,
+        }
+    }
+
+    async fn retrieve_memory_context(&self, prompt: &str) -> Option<String> {
+        let Some(memory) = &self.memory else {
+            return None;
+        };
+
+        match memory.retrieve_context(prompt.to_string()).await {
+            Ok(context) => context,
+            Err(error) => {
+                warn!(error = %error, "memory retrieval failed");
+                None
+            }
+        }
     }
 
     pub async fn encrypted_chat_completion(
@@ -45,6 +69,7 @@ impl CompletionHandler {
             messages = chat_req.messages.len(),
             ">>> EncryptedChatCompletion"
         );
+        let memory_context = self.retrieve_memory_context(&prompt).await;
         let response_text = self
             .agent
             .chat(LlmChatRequest::new(
@@ -59,6 +84,7 @@ impl CompletionHandler {
                     &self.config,
                     chrono::Local::now(),
                 ),
+                memory_context,
             ))
             .await
             .unwrap_or_else(|error| {
@@ -102,10 +128,12 @@ impl CompletionHandler {
             prompt_len = completion_req.prompt.len(),
             ">>> EncryptedCompletion"
         );
+        let prompt = completion_req.prompt;
+        let memory_context = self.retrieve_memory_context(&prompt).await;
         let response_text = self
             .agent
             .chat(LlmChatRequest::new(
-                completion_req.prompt,
+                prompt,
                 Vec::new(),
                 PromptTemplates {
                     system_prompt: self.config.config.server.system_prompt.clone(),
@@ -116,6 +144,7 @@ impl CompletionHandler {
                     &self.config,
                     chrono::Local::now(),
                 ),
+                memory_context,
             ))
             .await
             .unwrap_or_else(|error| {

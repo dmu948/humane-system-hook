@@ -58,6 +58,7 @@ pub struct LlmChatRequest {
     pub history: Vec<Message>,
     pub templates: PromptTemplates,
     pub template_context: PromptTemplateContext,
+    pub memory_context: Option<String>,
 }
 
 impl LlmChatRequest {
@@ -66,12 +67,14 @@ impl LlmChatRequest {
         history: Vec<Message>,
         templates: PromptTemplates,
         template_context: PromptTemplateContext,
+        memory_context: Option<String>,
     ) -> Self {
         Self {
             utterance,
             history,
             templates,
             template_context,
+            memory_context,
         }
     }
 }

@@ -43,6 +43,7 @@ axum = { version = "0.8", features = ["multipart"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "native-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 dotenvy = "0.15"
+memvid-core = { version = "=2.0.140", default-features = false, features = ["lex", "vec"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 fastembed = { version = "=5.8.0", default-features = false, features = ["ort-download-binaries"] }
@@ -62,5 +63,6 @@ hex = "0.4"
 tempfile = "3"
 
 [patch.crates-io]
+memvid-core = { git = "https://github.com/agg23/memvid", branch = "no-lock" }
 rig-core = { git = "https://github.com/agg23/rig", branch = "gemini-server-tool-passthrough" }
 rig-fastembed = { git = "https://github.com/agg23/rig", branch = "gemini-server-tool-passthrough" }

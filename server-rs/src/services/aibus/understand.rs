@@ -12,6 +12,7 @@ use std::sync::Arc;
 use super::envelope::unwrap_plaintext_data;
 use crate::config::ResolvedConfig;
 use crate::db::Database;
+use crate::llm::memory::MemoryService;
 use crate::llm::{LlmAgent, LlmChatRequest, PromptTemplateContext, PromptTemplates};
 use crate::proto::aibus::*;
 use crate::proto::common::encryption::{self, EncryptedData};
@@ -22,11 +23,22 @@ pub struct UnderstandHandler {
     agent: Arc<LlmAgent>,
     config: Arc<ResolvedConfig>,
     db: Database,
+    memory: Option<MemoryService>,
 }
 
 impl UnderstandHandler {
-    pub fn new(agent: Arc<LlmAgent>, config: Arc<ResolvedConfig>, db: Database) -> Self {
-        Self { agent, config, db }
+    pub fn new(
+        agent: Arc<LlmAgent>,
+        config: Arc<ResolvedConfig>,
+        db: Database,
+        memory: Option<MemoryService>,
+    ) -> Self {
+        Self {
+            agent,
+            config,
+            db,
+            memory,
+        }
     }
 
     fn build_prompt_template_context(
@@ -178,12 +190,25 @@ impl UnderstandHandler {
             status_prompt: self.config.config.server.status_prompt.clone(),
         };
         let template_context = self.build_prompt_template_context(&req, &run_id, &self.config);
+        let memory_context = if let Some(memory) = &self.memory {
+            match memory.retrieve_context(utterance.clone()).await {
+                Ok(context) => context,
+                Err(error) => {
+                    warn!(error = %error, "memory retrieval failed");
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let chat_request = LlmChatRequest::new(
             utterance.clone(),
             history.clone(),
             templates,
             template_context,
+            memory_context,
         );
+
         let response_text = match self.agent.chat(chat_request).await {
             Ok(text) => text,
             Err(error) => {

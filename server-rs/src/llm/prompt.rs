@@ -22,6 +22,18 @@ impl PromptBuilder {
 
         history.extend(request.history.iter().cloned());
 
+        if let Some(memory_context) = request
+            .memory_context
+            .as_deref()
+            .map(str::trim)
+            .filter(|context| !context.is_empty())
+        {
+            let memory_prompt = format!(
+                "Relevant long-term memory:\n{memory_context}\n\nUse these memories when relevant. Do not mention them unless useful."
+            );
+            history.push(Message::system(memory_prompt));
+        }
+
         if let Some(status_prompt) = render_template(
             "status_prompt",
             &request.templates.status_prompt,

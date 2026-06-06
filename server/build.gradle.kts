@@ -22,8 +22,22 @@ val buildRustServerAndroid by tasks.registering(Exec::class) {
     workingDir = rustProjectDir.asFile
     commandLine("cargo", "ndk", "-t", rustAbi, "build", "--release")
     environment("PENUMBRA_VERSION", androidVersionName)
+    // tokenizers/esaxx-rs and ort-sys can link the Android C++ runtime. This
+    // Rust binary is launched as a standalone executable, so link libc++
+    // statically instead of requiring libc++_shared.so to be packaged/loaded.
+    environment("CXXSTDLIB", "c++_static")
+    environment("ORT_CXX_STDLIB", "c++_static")
+    environment("RUSTFLAGS", "-C link-arg=-lc++abi")
+    // ort-sys' download-binaries feature is enabled transitively by memvid-core,
+    // but Android ONNX Runtime binaries are provided by onnxruntime-android and
+    // loaded dynamically. Setting ORT_LIB_LOCATION suppresses the unsupported
+    // ort-sys Android download path when ort/load-dynamic is also enabled.
+    environment("ORT_LIB_LOCATION", rustProjectDir.dir("target/unused-ort-lib-location").asFile.absolutePath)
 
     inputs.property("penumbraVersion", androidVersionName)
+    inputs.property("cxxStdlib", "c++_static")
+    inputs.property("ortCxxStdlib", "c++_static")
+    inputs.property("rustflags", "-C link-arg=-lc++abi")
     inputs.files(
         fileTree(rustProjectDir.asFile) {
             exclude("target/**")

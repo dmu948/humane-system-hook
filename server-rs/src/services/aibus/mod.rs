@@ -15,8 +15,7 @@ use self::vision::VisionHandler;
 use self::weather::WeatherHandler;
 use crate::config::ResolvedConfig;
 use crate::db::Database;
-use crate::external::osm::OsmClient;
-use crate::external::weather::WeatherClient;
+use crate::llm::memory::MemoryService;
 use crate::llm::LlmAgent;
 use crate::nearby::NearbyClient;
 use crate::proto::aibus::ai_bus_service_server::AiBusService;
@@ -44,6 +43,7 @@ impl AiBus {
         nearby_client: NearbyClient,
         http_client: reqwest::Client,
         db: Database,
+        memory: Option<MemoryService>,
     ) -> Self {
         Self {
             handlers: Arc::new(RwLock::new(Arc::new(AiBusHanders::new(
@@ -52,6 +52,7 @@ impl AiBus {
                 nearby_client,
                 http_client,
                 db,
+                memory,
             )))),
         }
     }
@@ -355,9 +356,15 @@ impl AiBusHanders {
         nearby_client: NearbyClient,
         http_client: reqwest::Client,
         db: Database,
+        memory: Option<MemoryService>,
     ) -> Self {
         Self {
-            understand: UnderstandHandler::new(agent.clone(), config.clone(), db.clone()),
+            understand: UnderstandHandler::new(
+                agent.clone(),
+                config.clone(),
+                db.clone(),
+                memory.clone(),
+            ),
             vision: VisionHandler::new(agent.clone()),
             weather: WeatherHandler::new(
                 http_client.clone(),
@@ -365,7 +372,7 @@ impl AiBusHanders {
             ),
             nearby: NearbySearchHandler::new(nearby_client),
             reverse_geocode: ReverseGeocodeHandler::new(http_client.clone()),
-            completion: CompletionHandler::new(agent.clone(), config.clone()),
+            completion: CompletionHandler::new(agent.clone(), config.clone(), memory),
             geolocate: GeoLocateHandler,
             stubs: StubHandler,
         }

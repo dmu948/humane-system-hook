@@ -10,6 +10,10 @@ use tracing::{info, warn};
 use crate::config::{LlmConfig, ResolvedConfig};
 use crate::external::osm::OsmClient;
 use crate::external::weather::WeatherClient;
+use crate::llm::memory::MemoryService;
+use crate::llm::tools::memory::{
+    ForgetMemoryTool, RememberTool, SearchMemoryTool, UpdateMemoryTool,
+};
 use crate::nearby::NearbyClient;
 
 use super::fastembed;
@@ -22,14 +26,20 @@ pub struct LlmToolContext {
     pub nearby_client: Arc<NearbyClient>,
     pub osm: OsmClient,
     pub weather: WeatherClient,
+    pub memory: Option<MemoryService>,
 }
 
 impl LlmToolContext {
-    pub fn new(http_client: reqwest::Client, config: &ResolvedConfig) -> Self {
+    pub fn new(
+        http_client: reqwest::Client,
+        config: &ResolvedConfig,
+        memory: Option<MemoryService>,
+    ) -> Self {
         Self {
             nearby_client: Arc::new(NearbyClient::new(http_client.clone())),
             osm: OsmClient::new(http_client.clone()),
             weather: WeatherClient::new(http_client, config.pirate_weather_api_key.clone()),
+            memory,
         }
     }
 
@@ -57,6 +67,16 @@ impl LlmToolContext {
 
         let builder = if self.weather.is_configured() {
             builder.dynamic_tool(WeatherTool::new(self.weather.clone()))
+        } else {
+            builder
+        };
+
+        let builder = if let Some(memory) = &self.memory {
+            builder
+                .dynamic_tool(RememberTool::new(memory.clone()))
+                .dynamic_tool(SearchMemoryTool::new(memory.clone()))
+                .dynamic_tool(UpdateMemoryTool::new(memory.clone()))
+                .dynamic_tool(ForgetMemoryTool::new(memory.clone()))
         } else {
             builder
         };

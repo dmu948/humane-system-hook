@@ -92,6 +92,41 @@ pub struct LlmConfig {
     /// Server-local native LLM tools.
     #[serde(default)]
     pub tools: LlmToolsConfig,
+
+    /// Long-term assistant memory.
+    #[serde(default)]
+    pub memory: LlmMemoryConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct LlmMemoryConfig {
+    /// Enable long-term assistant memory.
+    #[serde(default = "default_memory_enabled")]
+    pub enabled: bool,
+
+    /// Path to the Memvid .mv2 memory file.
+    #[serde(default = "default_memory_path")]
+    pub path: String,
+
+    /// Number of memories to retrieve for each request.
+    #[serde(default = "default_memory_top_k")]
+    pub top_k: usize,
+
+    /// Number of characters to include per retrieved snippet.
+    #[serde(default = "default_memory_snippet_chars")]
+    pub snippet_chars: usize,
+
+    /// Maximum total characters injected into the prompt.
+    #[serde(default = "default_memory_max_context_chars")]
+    pub max_context_chars: usize,
+
+    /// Automatically retrieve relevant memory before LLM calls.
+    #[serde(default = "default_memory_auto_retrieve")]
+    pub auto_retrieve: bool,
+
+    /// Automatically save conversation turns. Kept disabled initially; writes are explicit via tools.
+    #[serde(default)]
+    pub auto_remember: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -234,6 +269,30 @@ fn default_tool_concurrency() -> usize {
     2
 }
 
+fn default_memory_enabled() -> bool {
+    true
+}
+
+fn default_memory_path() -> String {
+    "./data/assistant-memory.mv2".into()
+}
+
+fn default_memory_top_k() -> usize {
+    5
+}
+
+fn default_memory_snippet_chars() -> usize {
+    500
+}
+
+fn default_memory_max_context_chars() -> usize {
+    1500
+}
+
+fn default_memory_auto_retrieve() -> bool {
+    true
+}
+
 fn default_http_bind_addr() -> String {
     "0.0.0.0:8080".into()
 }
@@ -278,6 +337,21 @@ impl Default for LlmConfig {
             base_url: None,
             gemini_google_search: false,
             tools: LlmToolsConfig::default(),
+            memory: LlmMemoryConfig::default(),
+        }
+    }
+}
+
+impl Default for LlmMemoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_memory_enabled(),
+            path: default_memory_path(),
+            top_k: default_memory_top_k(),
+            snippet_chars: default_memory_snippet_chars(),
+            max_context_chars: default_memory_max_context_chars(),
+            auto_retrieve: default_memory_auto_retrieve(),
+            auto_remember: false,
         }
     }
 }
@@ -364,6 +438,15 @@ impl Config {
                 )
                 .into());
             }
+            if config.llm.memory.enabled
+                && !std::path::Path::new(&config.llm.memory.path).is_absolute()
+            {
+                return Err(format!(
+                    "Android requires absolute llm.memory.path when memory is enabled, got {}",
+                    config.llm.memory.path
+                )
+                .into());
+            }
         }
 
         Ok(config)
@@ -445,6 +528,9 @@ mod tests {
 
         assert_eq!(config.llm.provider, LlmProvider::Echo);
         assert_eq!(config.llm.tools, LlmToolsConfig::default());
+        assert_eq!(config.llm.memory, LlmMemoryConfig::default());
+        assert!(config.llm.memory.enabled);
+        assert_eq!(config.llm.memory.path, default_memory_path());
         assert_eq!(config.server.http_bind_addr, default_http_bind_addr());
         assert_eq!(config.storage.media_dir, default_media_dir());
     }
@@ -474,6 +560,36 @@ max_tool_turns = 3
             config.llm.tools.tool_concurrency,
             default_tool_concurrency()
         );
+    }
+
+    #[test]
+    fn loads_partial_llm_memory_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_config(
+            &dir,
+            "custom.toml",
+            r#"
+[llm.memory]
+path = "/tmp/assistant-memory.mv2"
+top_k = 3
+"#,
+        );
+
+        let config = Config::load(&path).unwrap();
+
+        assert!(config.llm.memory.enabled);
+        assert_eq!(config.llm.memory.path, "/tmp/assistant-memory.mv2");
+        assert_eq!(config.llm.memory.top_k, 3);
+        assert_eq!(
+            config.llm.memory.snippet_chars,
+            default_memory_snippet_chars()
+        );
+        assert_eq!(
+            config.llm.memory.max_context_chars,
+            default_memory_max_context_chars()
+        );
+        assert!(config.llm.memory.auto_retrieve);
+        assert!(!config.llm.memory.auto_remember);
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::config::ResolvedConfig;
 
 use super::backend::{LlmBackend, LlmFuture};
 use super::error::friendly_error_message;
+use super::memory::MemoryService;
 use super::prompt::PromptBuilder;
 use super::providers::vision_message;
 use super::request::LlmChatRequest;
@@ -43,6 +44,7 @@ where
         request_logger: LlmRequestLogger,
         config: &ResolvedConfig,
         http_client: HttpClient,
+        memory: Option<MemoryService>,
         customize_builder: F,
     ) -> Result<Arc<dyn LlmBackend>, Box<dyn std::error::Error + Send + Sync>>
     where
@@ -53,7 +55,7 @@ where
         let builder = customize_builder(client.agent(&llm_config.model));
 
         let tool_resources = if llm_config.tools.enabled {
-            let tool_context = LlmToolContext::new(http_client, config);
+            let tool_context = LlmToolContext::new(http_client, config, memory);
             tool_context
                 .build_tool_resources(llm_config)
                 .await

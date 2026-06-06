@@ -13,22 +13,31 @@ object BootstrapConfig {
     private const val MEDIA_DIR_NAME = "media"
     private const val DB_FILE_NAME = "penumbra.db"
     private const val LOG_DIR_NAME = "logs"
+    private const val MEMORY_FILE_NAME = "assistant-memory.mv2"
     private const val STORAGE_MEDIA_PLACEHOLDER = "__APP_MEDIA_DIR__"
     private const val STORAGE_DB_PLACEHOLDER = "__APP_DB_PATH__"
     private const val LOG_DIR_PLACEHOLDER = "__APP_LOG_DIR__"
+    private const val MEMORY_PATH_PLACEHOLDER = "__APP_MEMORY_PATH__"
     private const val PERSISTENT_ROOT_DIR_NAME = "PenumbraOS"
 
-    fun ensureCanonicalConfig(context: Context): String {
+    fun ensurePersistentRoot(): File {
         val externalRoot = File(Environment.getExternalStorageDirectory(), PERSISTENT_ROOT_DIR_NAME)
 
         check(externalRoot.exists() || externalRoot.mkdirs()) {
             "Failed to create persistent storage dir at ${externalRoot.absolutePath}"
         }
 
+        return externalRoot
+    }
+
+    fun ensureCanonicalConfig(context: Context): String {
+        val externalRoot = ensurePersistentRoot()
+
         val configFile = File(externalRoot, CONFIG_FILE_NAME)
         val mediaDir = File(externalRoot, MEDIA_DIR_NAME)
         val dbFile = File(externalRoot, DB_FILE_NAME)
         val logDir = File(externalRoot, LOG_DIR_NAME)
+        val memoryFile = File(externalRoot, MEMORY_FILE_NAME)
 
         check(mediaDir.exists() || mediaDir.mkdirs()) {
             "Failed to create media dir at ${mediaDir.absolutePath}"
@@ -49,14 +58,15 @@ object BootstrapConfig {
                 "config=${configFile.absolutePath}, " +
                 "db=${dbFile.absolutePath}, " +
                 "media=${mediaDir.absolutePath}, " +
-                "logs=${logDir.absolutePath}",
+                "logs=${logDir.absolutePath}, " +
+                "memory=${memoryFile.absolutePath}",
         )
 
         if (configFile.exists()) {
             Log.w(TAG, "Using existing canonical config at ${configFile.absolutePath}")
             applyAndroidManagedDefaults(
                 configFile,
-                managedFields(mediaDir, dbFile, logDir),
+                managedFields(mediaDir, dbFile, logDir, memoryFile),
             )
             return configFile.absolutePath
         }
@@ -66,6 +76,7 @@ object BootstrapConfig {
             .replace(STORAGE_MEDIA_PLACEHOLDER, mediaDir.absolutePath)
             .replace(STORAGE_DB_PLACEHOLDER, dbFile.absolutePath)
             .replace(LOG_DIR_PLACEHOLDER, logDir.absolutePath)
+            .replace(MEMORY_PATH_PLACEHOLDER, memoryFile.absolutePath)
 
         configFile.writeText(renderedToml)
         Log.w(TAG, "Wrote canonical config to ${configFile.absolutePath}")
@@ -78,10 +89,12 @@ object BootstrapConfig {
         mediaDir: File,
         dbFile: File,
         logDir: File,
+        memoryFile: File,
     ): List<ManagedField> = listOf(
         ManagedField("storage", "media_dir", mediaDir.absolutePath),
         ManagedField("storage", "db_path", dbFile.absolutePath),
         ManagedField("logging", "log_dir", logDir.absolutePath),
+        ManagedField("llm.memory", "path", memoryFile.absolutePath),
     )
 
     /**

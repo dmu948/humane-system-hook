@@ -3,6 +3,9 @@ provider = "echo"
 model = "gemini-2.5-flash"
 gemini_google_search = false
 
+[llm.memory]
+path = "__APP_MEMORY_PATH__"
+
 [server]
 http_bind_addr = "0.0.0.0:8080"
 grpc_bind_addr = "127.0.0.1:9090"

@@ -4,7 +4,9 @@ use fastembed::{
 };
 use rig_fastembed::EmbeddingModel;
 
-const MODEL_DIMENSIONS: usize = 384;
+pub const EMBEDDED_MODEL_NAME: &str = "Qdrant/all-MiniLM-L6-v2-onnx";
+pub const EMBEDDED_MODEL_REVISION: &str = "5f1b8cd78bc4fb444dd171e59b18f3a3af89a079";
+pub const EMBEDDED_MODEL_DIMENSIONS: usize = 384;
 
 pub fn build_embedding_model() -> Result<EmbeddingModel, String> {
     let tokenizer_files = TokenizerFiles {
@@ -36,6 +38,6 @@ pub fn build_embedding_model() -> Result<EmbeddingModel, String> {
     let model_info = FastembedTextEmbedding::get_model_info(&FastembedModel::AllMiniLML6V2)
         .map_err(|err| err.to_string())?;
 
-    EmbeddingModel::new_from_user_defined(user_defined_model, MODEL_DIMENSIONS, model_info)
+    EmbeddingModel::new_from_user_defined(user_defined_model, EMBEDDED_MODEL_DIMENSIONS, model_info)
         .map_err(|err| err.to_string())
 }

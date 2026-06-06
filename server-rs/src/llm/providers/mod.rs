@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::config::{LlmProvider, ResolvedConfig};
 use crate::llm::backend::LlmBackend;
+use crate::llm::memory::MemoryService;
 use crate::llm::providers::anthropic::AnthropicProvider;
 use crate::llm::providers::echo::EchoProvider;
 use crate::llm::providers::gemini::GeminiProvider;
@@ -20,13 +21,18 @@ pub async fn build_backend(
     config: &ResolvedConfig,
     http_client: HttpClient,
     request_logger: LlmRequestLogger,
+    memory: Option<MemoryService>,
 ) -> Result<Arc<dyn LlmBackend>, Box<dyn std::error::Error + Send + Sync>> {
     match config.config.llm.provider {
         LlmProvider::Echo => Ok(EchoProvider::build()),
-        LlmProvider::Gemini => GeminiProvider::build(config, http_client, request_logger).await,
-        LlmProvider::Anthropic => AnthropicProvider::build(config, http_client, request_logger).await,
+        LlmProvider::Gemini => {
+            GeminiProvider::build(config, http_client, request_logger, memory).await
+        }
+        LlmProvider::Anthropic => {
+            AnthropicProvider::build(config, http_client, request_logger, memory).await
+        }
         LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => {
-            OpenAiProvider::build(config, http_client, request_logger).await
+            OpenAiProvider::build(config, http_client, request_logger, memory).await
         }
     }
 }

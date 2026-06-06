@@ -30,6 +30,7 @@ use crate::esim::{
     CellularStatusError, DeviceToggleError, EsimBridge, EsimRequestError, EsimRequestRecord,
     EsimSnapshot,
 };
+use crate::llm::memory::MemoryService;
 use crate::llm::{validate_prompt_template, LlmAgent, LlmRequestLogger};
 use crate::nearby::NearbyClient;
 use crate::services::aibus::{AiBus, AiBusHanders};
@@ -244,6 +245,18 @@ struct LlmSettingsResponse {
     base_url: Option<String>,
     gemini_google_search: bool,
     tools: LlmToolsSettingsResponse,
+    memory: LlmMemorySettingsResponse,
+}
+
+#[derive(Serialize)]
+struct LlmMemorySettingsResponse {
+    enabled: bool,
+    path: String,
+    top_k: usize,
+    snippet_chars: usize,
+    max_context_chars: usize,
+    auto_retrieve: bool,
+    auto_remember: bool,
 }
 
 #[derive(Serialize)]
@@ -300,6 +313,15 @@ async fn get_settings(State(state): State<ApiState>) -> Json<SettingsResponse> {
                 dynamic_tool_count: config.llm.tools.dynamic_tool_count,
                 max_tool_turns: config.llm.tools.max_tool_turns,
                 tool_concurrency: config.llm.tools.tool_concurrency,
+            },
+            memory: LlmMemorySettingsResponse {
+                enabled: config.llm.memory.enabled,
+                path: config.llm.memory.path.clone(),
+                top_k: config.llm.memory.top_k,
+                snippet_chars: config.llm.memory.snippet_chars,
+                max_context_chars: config.llm.memory.max_context_chars,
+                auto_retrieve: config.llm.memory.auto_retrieve,
+                auto_remember: config.llm.memory.auto_remember,
             },
         },
         server: ServerSettingsResponse {
@@ -669,6 +691,18 @@ struct UpdateLlmSettings {
     base_url: Option<String>,
     gemini_google_search: Option<bool>,
     tools: Option<UpdateLlmToolsSettings>,
+    memory: Option<UpdateLlmMemorySettings>,
+}
+
+#[derive(Deserialize)]
+struct UpdateLlmMemorySettings {
+    enabled: Option<bool>,
+    path: Option<String>,
+    top_k: Option<usize>,
+    snippet_chars: Option<usize>,
+    max_context_chars: Option<usize>,
+    auto_retrieve: Option<bool>,
+    auto_remember: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -825,6 +859,37 @@ async fn update_settings(
                 }
             }
         }
+        if let Some(ref memory) = llm.memory {
+            if let Some(enabled) = memory.enabled {
+                config.llm.memory.enabled = enabled;
+            }
+            if let Some(ref path) = memory.path {
+                let trimmed = path.trim();
+                if trimmed.is_empty() {
+                    *config = original_config;
+                    return (StatusCode::BAD_REQUEST, "llm.memory.path cannot be empty")
+                        .into_response();
+                }
+                if trimmed != config.llm.memory.path {
+                    config.llm.memory.path = trimmed.to_string();
+                }
+            }
+            if let Some(top_k) = memory.top_k {
+                config.llm.memory.top_k = top_k.max(1);
+            }
+            if let Some(snippet_chars) = memory.snippet_chars {
+                config.llm.memory.snippet_chars = snippet_chars.max(1);
+            }
+            if let Some(max_context_chars) = memory.max_context_chars {
+                config.llm.memory.max_context_chars = max_context_chars.max(1);
+            }
+            if let Some(auto_retrieve) = memory.auto_retrieve {
+                config.llm.memory.auto_retrieve = auto_retrieve;
+            }
+            if let Some(auto_remember) = memory.auto_remember {
+                config.llm.memory.auto_remember = auto_remember;
+            }
+        }
     }
 
     // --- Server changes ---
@@ -883,10 +948,28 @@ async fn update_settings(
     let new_resolved = Arc::new(ResolvedConfig::resolve(config.clone()));
 
     // --- Validate: build a new LLM/AiBus tree before committing ---
+    let memory = if config.llm.memory.enabled {
+        match MemoryService::open(config.llm.memory.clone()).await {
+            Ok(memory) => Some(memory),
+            Err(error) => {
+                warn!(error = %error, "failed to initialize assistant memory, rolling back");
+                *config = original_config;
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid memory configuration: {error}"),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
+
     let agent_result = LlmAgent::from_config(
         &new_resolved,
         state.http_client.clone(),
         state.llm_request_logger.clone(),
+        memory.clone(),
     )
     .await
     .map_err(|e| e.to_string());
@@ -900,6 +983,7 @@ async fn update_settings(
                 NearbyClient::new(state.http_client.clone()),
                 state.http_client.clone(),
                 state.db.clone(),
+                memory,
             ));
             state.aibus.replace(new_aibus).await;
             state.dedup.clear().await;
@@ -940,6 +1024,15 @@ async fn update_settings(
                 dynamic_tool_count: config.llm.tools.dynamic_tool_count,
                 max_tool_turns: config.llm.tools.max_tool_turns,
                 tool_concurrency: config.llm.tools.tool_concurrency,
+            },
+            memory: LlmMemorySettingsResponse {
+                enabled: config.llm.memory.enabled,
+                path: config.llm.memory.path.clone(),
+                top_k: config.llm.memory.top_k,
+                snippet_chars: config.llm.memory.snippet_chars,
+                max_context_chars: config.llm.memory.max_context_chars,
+                auto_retrieve: config.llm.memory.auto_retrieve,
+                auto_remember: config.llm.memory.auto_remember,
             },
         },
         server: ServerSettingsResponse {
@@ -1042,6 +1135,26 @@ fn persist_config_inner(
         if let Some(t) = table.as_table_mut() {
             t.remove("embedding_model");
         }
+    }
+
+    // --- [llm.memory] ---
+    {
+        if doc["llm"].as_table_mut().is_none() {
+            doc["llm"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        if doc["llm"]["memory"].as_table_mut().is_none() {
+            doc["llm"]["memory"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        let table = &mut doc["llm"]["memory"];
+        table["enabled"] = toml_edit::value(config.llm.memory.enabled);
+        table["path"] = toml_edit::value(&config.llm.memory.path);
+        table["top_k"] = toml_edit::value(config.llm.memory.top_k as i64);
+        table["snippet_chars"] = toml_edit::value(config.llm.memory.snippet_chars as i64);
+        table["max_context_chars"] = toml_edit::value(config.llm.memory.max_context_chars as i64);
+        table["auto_retrieve"] = toml_edit::value(config.llm.memory.auto_retrieve);
+        table["auto_remember"] = toml_edit::value(config.llm.memory.auto_remember);
     }
 
     // --- [server] ---
