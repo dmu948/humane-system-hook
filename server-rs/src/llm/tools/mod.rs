@@ -1,4 +1,6 @@
 pub mod fastembed;
+#[cfg(target_os = "android")]
+pub mod logcat;
 pub mod memory;
 pub mod nearby_search;
 pub mod registry;

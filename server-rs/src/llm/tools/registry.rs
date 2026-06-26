@@ -17,6 +17,8 @@ use crate::llm::tools::memory::{
 use crate::nearby::NearbyClient;
 
 use super::fastembed;
+#[cfg(target_os = "android")]
+use super::logcat::DumpLogcatTool;
 use super::nearby_search::NearbySearchTool;
 use super::reverse_geocode::ReverseGeocodeTool;
 use super::understand_scene::UnderstandSceneTool;
@@ -66,6 +68,9 @@ impl LlmToolContext {
             .dynamic_tool(NearbySearchTool::new(self.nearby_client.clone()))
             .dynamic_tool(ReverseGeocodeTool::new(self.osm.clone()))
             .dynamic_tool(UnderstandSceneTool);
+
+        #[cfg(target_os = "android")]
+        let builder = builder.dynamic_tool(DumpLogcatTool);
 
         let builder = if self.weather.is_configured() {
             builder.dynamic_tool(WeatherTool::new(self.weather.clone()))
