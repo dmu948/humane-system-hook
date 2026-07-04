@@ -29,6 +29,9 @@ object IronmanHooks {
         // crash-loops before ChannelFactory hooks ever get a chance to run.
         hookCredentialManager(cl)
 
+        // Work around Humane boot race. Wait for AppController init before publishInterfaces
+        CentralServiceHooks.install(cl)
+
         // Work around Humane boot race between TouchpadActionManager and SystemModeService
         TouchpadActionManagerHooks.install(cl)
 
@@ -109,7 +112,10 @@ object IronmanHooks {
                     if (param.throwable is NullPointerException) {
                         param.throwable = null
                         param.result = emptyArray<X509Certificate>()
-                        Log.w(TAG, "getCertificateChain() NPE suppressed — device cert chain missing, returning empty array")
+                        Log.w(
+                            TAG,
+                            "getCertificateChain() NPE suppressed — device cert chain missing, returning empty array"
+                        )
                     }
                 }
             })
@@ -402,7 +408,10 @@ object IronmanHooks {
                         // DAC private key missing — return a dummy ECDSA-like signature
                         param.throwable = null
                         param.result = ByteArray(64) { 0x01 }
-                        Log.w(TAG, "  DAC generateVerifierSignature() threw ${param.throwable?.javaClass?.simpleName} — returning dummy signature")
+                        Log.w(
+                            TAG,
+                            "  DAC generateVerifierSignature() threw ${param.throwable?.javaClass?.simpleName} — returning dummy signature"
+                        )
                     } else {
                         Log.w(TAG, "  DAC generateVerifierSignature() succeeded with real signature")
                     }
