@@ -6,8 +6,8 @@ use tracing::{info, warn};
 
 use super::envelope::unwrap_plaintext_data;
 use crate::config::ResolvedConfig;
-use crate::llm::ChatResult;
 use crate::llm::memory::MemoryService;
+use crate::llm::ChatResult;
 use crate::llm::{LlmAgent, LlmChatRequest, PromptTemplateContext, PromptTemplates};
 use crate::proto::aibus::*;
 use crate::proto::common::encryption::EncryptedData;

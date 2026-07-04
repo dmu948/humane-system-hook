@@ -15,8 +15,11 @@ pub fn build_embedding_model() -> Result<EmbeddingModel, String> {
             "/embedded-embedding-model/tokenizer.json"
         ))
         .to_vec(),
-        config_file: include_bytes!(concat!(env!("OUT_DIR"), "/embedded-embedding-model/config.json"))
-            .to_vec(),
+        config_file: include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/embedded-embedding-model/config.json"
+        ))
+        .to_vec(),
         special_tokens_map_file: include_bytes!(concat!(
             env!("OUT_DIR"),
             "/embedded-embedding-model/special_tokens_map.json"
@@ -30,7 +33,11 @@ pub fn build_embedding_model() -> Result<EmbeddingModel, String> {
     };
 
     let user_defined_model = UserDefinedEmbeddingModel::new(
-        include_bytes!(concat!(env!("OUT_DIR"), "/embedded-embedding-model/model.onnx")).to_vec(),
+        include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/embedded-embedding-model/model.onnx"
+        ))
+        .to_vec(),
         tokenizer_files,
     )
     .with_pooling(Pooling::Mean);

@@ -264,7 +264,7 @@ fn default_llm_tools_enabled() -> bool {
 }
 
 fn default_dynamic_tool_count() -> usize {
-    8
+    11
 }
 
 fn default_max_tool_turns() -> usize {

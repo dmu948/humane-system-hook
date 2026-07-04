@@ -61,7 +61,7 @@ val stageRustServerJniLibs by tasks.registering(Sync::class) {
 android {
     sourceSets {
         getByName("main") {
-            jniLibs.setSrcDirs(listOf(generatedJniLibsDir))
+            jniLibs.setSrcDirs(listOf(generatedJniLibsDir, "src/main/jniLibs"))
         }
     }
 

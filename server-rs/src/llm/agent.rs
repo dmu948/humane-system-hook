@@ -5,12 +5,12 @@ use tracing::info;
 
 use crate::config::ResolvedConfig;
 
-use super::ChatResult;
 use super::backend::LlmBackend;
 use super::memory::MemoryService;
 use super::providers;
 use super::request::LlmChatRequest;
 use super::request_log::LlmRequestLogger;
+use super::ChatResult;
 
 /// Hot-swappable LLM agent facade backed by an object-safe provider adapter.
 pub struct LlmAgent {

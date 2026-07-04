@@ -19,6 +19,7 @@ use crate::nearby::NearbyClient;
 use super::fastembed;
 #[cfg(target_os = "android")]
 use super::logcat::DumpLogcatTool;
+use super::native_host::{NewsHeadlinesGetTool, NewsSourcesListTool, WeatherGetTool};
 use super::nearby_search::NearbySearchTool;
 use super::reverse_geocode::ReverseGeocodeTool;
 use super::understand_scene::UnderstandSceneTool;
@@ -67,7 +68,10 @@ impl LlmToolContext {
         let builder = ToolSet::builder()
             .dynamic_tool(NearbySearchTool::new(self.nearby_client.clone()))
             .dynamic_tool(ReverseGeocodeTool::new(self.osm.clone()))
-            .dynamic_tool(UnderstandSceneTool);
+            .dynamic_tool(UnderstandSceneTool)
+            .dynamic_tool(WeatherGetTool)
+            .dynamic_tool(NewsSourcesListTool)
+            .dynamic_tool(NewsHeadlinesGetTool);
 
         #[cfg(target_os = "android")]
         let builder = builder.dynamic_tool(DumpLogcatTool);
@@ -95,6 +99,11 @@ impl LlmToolContext {
             warn!("LLM native tools enabled but registry produced no dynamic tool schemas");
             return Ok(None);
         }
+        let tool_names = schemas
+            .iter()
+            .map(|schema| schema.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
 
         let embedding_model = fastembed::build_embedding_model()?;
         let embeddings = EmbeddingsBuilder::new(embedding_model.clone())
@@ -110,6 +119,7 @@ impl LlmToolContext {
 
         info!(
             dynamic_tool_count = tools_config.dynamic_tool_count,
+            dynamic_tool_names = %tool_names,
             "LLM native dynamic tools ready"
         );
 

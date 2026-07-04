@@ -164,8 +164,12 @@ impl WeatherClient {
         latitude: f64,
         longitude: f64,
     ) -> Result<CurrentWeather, WeatherError> {
-        let report = self.weather(WeatherRequest::current(latitude, longitude)).await?;
-        let currently = report.current.ok_or(WeatherError::MissingCurrentConditions)?;
+        let report = self
+            .weather(WeatherRequest::current(latitude, longitude))
+            .await?;
+        let currently = report
+            .current
+            .ok_or(WeatherError::MissingCurrentConditions)?;
         let temperature_fahrenheit = currently.temperature_fahrenheit.unwrap_or(0.0);
         let temperature_celsius = currently
             .temperature_celsius
@@ -361,7 +365,12 @@ fn optional_i32(value: &serde_json::Value, key: &str) -> Option<i32> {
         .get(key)
         .and_then(|v| v.as_i64())
         .and_then(|value| i32::try_from(value).ok())
-        .or_else(|| value.get(key).and_then(|v| v.as_f64()).map(|value| value as i32))
+        .or_else(|| {
+            value
+                .get(key)
+                .and_then(|v| v.as_f64())
+                .map(|value| value as i32)
+        })
 }
 
 fn fahrenheit_to_celsius(value: f64) -> f64 {

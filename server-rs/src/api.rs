@@ -9,12 +9,12 @@ mod dev;
 pub mod device;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{Path, State};
-use axum::http::{StatusCode, header};
+use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, put};
 use axum::{Json, Router};
@@ -31,7 +31,7 @@ use crate::esim::{
     EsimSnapshot,
 };
 use crate::llm::memory::MemoryService;
-use crate::llm::{LlmAgent, LlmRequestLogger, validate_prompt_template};
+use crate::llm::{validate_prompt_template, LlmAgent, LlmRequestLogger};
 use crate::nearby::NearbyClient;
 use crate::services::aibus::{AiBus, AiBusHanders};
 use crate::storage::{MediaStore, MemoryRecord};

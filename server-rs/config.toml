@@ -8,7 +8,7 @@ model = "gemini-2.5-flash"   # model ID for the provider
 [llm.tools]
 enabled = true
 # Tool embeddings use the model embedded into the server binary at build time.
-dynamic_tool_count = 8
+dynamic_tool_count = 11
 max_tool_turns = 5
 tool_concurrency = 2
 

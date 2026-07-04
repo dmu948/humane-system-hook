@@ -1,9 +1,11 @@
 package com.penumbraos.server
 
 import android.content.Context
+import android.system.Os
 import android.util.Log
 import java.io.BufferedReader
 import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
@@ -19,10 +21,13 @@ object NativeBridge {
         val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
         val executable = File(nativeLibDir, EXECUTABLE_NAME)
         val onnxRuntime = File(nativeLibDir, "libonnxruntime.so")
+        val penumbraToolHost = File(nativeLibDir, "libpenumbra_tool_host.so")
 
         require(executable.isFile) {
             "Server executable not found at ${executable.absolutePath}"
         }
+
+        installPenumbraToolHost(context)
 
         Log.w(
             TAG,
@@ -33,6 +38,12 @@ object NativeBridge {
             .directory(File(configPath).parentFile)
             .redirectErrorStream(true)
         processBuilder.environment()["ORT_DYLIB_PATH"] = onnxRuntime.absolutePath
+        processBuilder.environment()["PENUMBRA_TOOL_HOST_PATH"] = penumbraToolHost.absolutePath
+
+        Log.w(
+            TAG,
+            "Native penumbra_tool_host: path=${penumbraToolHost.absolutePath}, exists=${penumbraToolHost.exists()}, canExecute=${penumbraToolHost.canExecute()}",
+        )
 
         val process = processBuilder.start()
 
@@ -43,6 +54,35 @@ object NativeBridge {
 
         Log.w(TAG, "Spawned server process id=$processLabel")
         return process
+    }
+
+    private fun installPenumbraToolHost(context: Context) {
+        val outFile = File(context.filesDir, "penumbra_tool_host")
+        try {
+            context.assets.open("penumbra_tool_host").use { input ->
+                FileOutputStream(outFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Os.chmod(outFile.absolutePath, 0b111000000)
+            Log.w(
+                TAG,
+                """
+                Installed penumbra_tool_host: path=${outFile.absolutePath}
+                exists=${outFile.exists()}
+                canRead=${outFile.canRead()}
+                canWrite=${outFile.canWrite()}
+                canExecute=${outFile.canExecute()}
+                length=${outFile.length()}
+                """.trimIndent(),
+            )
+        } catch (e: Exception) {
+            Log.e(
+                TAG,
+                "Failed to install penumbra_tool_host",
+                e,
+            )
+        }
     }
 
     fun stop(process: Process) {

@@ -125,7 +125,6 @@ impl LLMWeatherPoint {
             uv: point.uv_index,
         }
     }
-
 }
 
 #[derive(Debug, Serialize)]
