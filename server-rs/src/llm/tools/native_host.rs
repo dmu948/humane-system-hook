@@ -28,6 +28,9 @@ pub struct WeatherGetArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct NewsSourcesListArgs {}
+
+#[derive(Debug, Deserialize)]
 pub struct NewsHeadlinesGetArgs {
     pub source: String,
 }
@@ -99,7 +102,7 @@ impl Tool for NewsSourcesListTool {
     const NAME: &'static str = "news_sources_list";
 
     type Error = NativeHostToolError;
-    type Args = ();
+    type Args = NewsSourcesListArgs;
     type Output = NativeHostOutput;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
@@ -294,6 +297,13 @@ mod tests {
 
         assert!(err.contains("/data/data/com.penumbraos.server/files/penumbra_tool_host"));
         assert!(err.contains("/data/local/tmp/penumbraos/penumbra_tool_host"));
+    }
+
+    #[test]
+    fn news_sources_args_accept_empty_object() {
+        let args = serde_json::from_str::<NewsSourcesListArgs>("{}");
+
+        assert!(args.is_ok());
     }
 
     #[tokio::test]
