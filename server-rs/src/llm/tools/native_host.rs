@@ -16,23 +16,9 @@ const NATIVE_HOST_PATHS: [&str; 2] = [
 #[derive(Clone, Default)]
 pub struct WeatherGetTool;
 
-#[derive(Clone, Default)]
-pub struct NewsSourcesListTool;
-
-#[derive(Clone, Default)]
-pub struct NewsHeadlinesGetTool;
-
 #[derive(Debug, Deserialize)]
 pub struct WeatherGetArgs {
     pub location: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewsSourcesListArgs {}
-
-#[derive(Debug, Deserialize)]
-pub struct NewsHeadlinesGetArgs {
-    pub source: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,95 +74,6 @@ impl ToolEmbedding for WeatherGetTool {
     fn embedding_docs(&self) -> Vec<String> {
         vec![
             "Get live weather by location, city, state, ZIP code, or place name. Use for prompts like: check the weather in Fairfax, what is the temperature outside, is it raining, do I need a jacket, what is the humidity, what is the wind like.".to_string(),
-        ]
-    }
-
-    fn context(&self) -> Self::Context {}
-
-    fn init(_state: Self::State, _context: Self::Context) -> Result<Self, Self::InitError> {
-        Ok(Self)
-    }
-}
-
-impl Tool for NewsSourcesListTool {
-    const NAME: &'static str = "news_sources_list";
-
-    type Error = NativeHostToolError;
-    type Args = NewsSourcesListArgs;
-    type Output = NativeHostOutput;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List the news sources available through the local PenumbraOS native tool host. Use this when the user asks what news sources are available.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        }
-    }
-
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
-        call_native_host(&["news-sources"])
-    }
-}
-
-impl ToolEmbedding for NewsSourcesListTool {
-    type InitError = Infallible;
-    type Context = ();
-    type State = ();
-
-    fn embedding_docs(&self) -> Vec<String> {
-        vec![
-            "List supported news sources and feeds. Use for prompts like: what news sources do you have, list news sources, what feeds can you read.".to_string(),
-        ]
-    }
-
-    fn context(&self) -> Self::Context {}
-
-    fn init(_state: Self::State, _context: Self::Context) -> Result<Self, Self::InitError> {
-        Ok(Self)
-    }
-}
-
-impl Tool for NewsHeadlinesGetTool {
-    const NAME: &'static str = "news_headlines_get";
-
-    type Error = NativeHostToolError;
-    type Args = NewsHeadlinesGetArgs;
-    type Output = NativeHostOutput;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Get current headlines from an allowlisted news source using the local PenumbraOS native tool host. Use this when the user asks for today's news, headlines, or headlines from a specific supported source.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "Allowlisted news source name, such as hackernews. Use news_sources_list first if the user asks what sources are available."
-                    }
-                },
-                "required": ["source"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        call_native_host(&["news-headlines", args.source.as_str()])
-    }
-}
-
-impl ToolEmbedding for NewsHeadlinesGetTool {
-    type InitError = Infallible;
-    type Context = ();
-    type State = ();
-
-    fn embedding_docs(&self) -> Vec<String> {
-        vec![
-            "Get current news headlines from an allowlisted source. Use for prompts like: give me today's news headlines, latest Hacker News headlines, what's in the news, top stories.".to_string(),
         ]
     }
 
@@ -299,13 +196,6 @@ mod tests {
         assert!(err.contains("/data/local/tmp/penumbraos/penumbra_tool_host"));
     }
 
-    #[test]
-    fn news_sources_args_accept_empty_object() {
-        let args = serde_json::from_str::<NewsSourcesListArgs>("{}");
-
-        assert!(args.is_ok());
-    }
-
     #[tokio::test]
     async fn weather_definition_uses_expected_name() {
         let definition = WeatherGetTool.definition(String::new()).await;
@@ -313,22 +203,5 @@ mod tests {
         assert_eq!(definition.name, "weather_get");
         assert!(definition.description.contains("weather"));
         assert!(definition.parameters.to_string().contains("location"));
-    }
-
-    #[tokio::test]
-    async fn news_sources_definition_uses_expected_name() {
-        let definition = NewsSourcesListTool.definition(String::new()).await;
-
-        assert_eq!(definition.name, "news_sources_list");
-        assert!(definition.description.contains("news sources"));
-    }
-
-    #[tokio::test]
-    async fn news_headlines_definition_uses_expected_name() {
-        let definition = NewsHeadlinesGetTool.definition(String::new()).await;
-
-        assert_eq!(definition.name, "news_headlines_get");
-        assert!(definition.description.contains("headlines"));
-        assert!(definition.parameters.to_string().contains("source"));
     }
 }
