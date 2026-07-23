@@ -26,13 +26,33 @@ impl Tool for UnderstandSceneTool {
                 This will trigger the device camera to take a picture and send it to you for \
                 analysis."
                 .to_string(),
-            parameters: json!(null),
+            // OpenAI-compatible providers require function parameters to be a
+            // JSON Schema object, even for tools that take no arguments.
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+            }),
         }
     }
 
     async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
         // Unreachable. This tool will never actually be called
         Ok(json!({}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn no_argument_tool_still_exposes_an_object_schema() {
+        let definition = UnderstandSceneTool.definition(String::new()).await;
+        assert!(definition.parameters.is_object());
+        assert_eq!(definition.parameters["type"], "object");
+        assert_eq!(definition.parameters["additionalProperties"], false);
     }
 }
 

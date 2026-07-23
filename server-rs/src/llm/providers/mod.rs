@@ -29,7 +29,7 @@ pub async fn build_backend(
         LlmProvider::Anthropic => {
             AnthropicProvider::build(config, http_client, request_logger, memory).await
         }
-        LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => {
+        LlmProvider::OpenAi | LlmProvider::OpenAiCompatible | LlmProvider::Perplexity => {
             OpenAiProvider::build(config, http_client, request_logger, memory).await
         }
     }

@@ -7,6 +7,7 @@ use crate::config::ResolvedConfig;
 
 use super::backend::LlmBackend;
 use super::memory::MemoryService;
+use super::model_router::select_model;
 use super::providers;
 use super::request::LlmChatRequest;
 use super::request_log::LlmRequestLogger;
@@ -35,6 +36,8 @@ impl LlmAgent {
 
     /// Send a prompt with request-scoped conversation and system prompt context to the LLM.
     pub async fn chat(&self, request: LlmChatRequest) -> Result<ChatResult, String> {
-        self.backend.chat(request).await
+        let model = select_model(&request.utterance);
+        info!(model, utterance = %request.utterance, "routed LLM request");
+        self.backend.chat(request.with_model(model)).await
     }
 }

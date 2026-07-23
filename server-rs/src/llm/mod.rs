@@ -2,6 +2,7 @@ mod agent;
 mod backend;
 mod error;
 pub mod memory;
+mod model_router;
 mod prompt;
 mod providers;
 mod request;

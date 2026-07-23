@@ -47,6 +47,7 @@ pub enum LlmProvider {
     OpenAi,
     #[serde(rename = "openai-compatible")]
     OpenAiCompatible,
+    Perplexity,
 }
 
 impl LlmProvider {
@@ -58,6 +59,7 @@ impl LlmProvider {
             Self::Anthropic => "anthropic",
             Self::OpenAi => "openai",
             Self::OpenAiCompatible => "openai-compatible",
+            Self::Perplexity => "perplexity",
         }
     }
 }
@@ -70,7 +72,7 @@ impl std::fmt::Display for LlmProvider {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LlmConfig {
-    /// Provider name: "gemini", "anthropic", "openai", "openai-compatible", "echo"
+    /// Provider name: "gemini", "anthropic", "openai", "openai-compatible", "perplexity", "echo"
     #[serde(default = "default_provider")]
     pub provider: LlmProvider,
 
@@ -542,6 +544,7 @@ impl LlmConfig {
             LlmProvider::Gemini => "GEMINI_API_KEY",
             LlmProvider::Anthropic => "ANTHROPIC_API_KEY",
             LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => "OPENAI_API_KEY",
+            LlmProvider::Perplexity => "PERPLEXITY_API_KEY",
             LlmProvider::Echo => return None,
         };
 
@@ -826,6 +829,25 @@ public_addr = "192.0.2.10:8080"
         assert_eq!(config.llm.model, "gpt-4.1-mini");
         assert_eq!(config.server.public_addr, "192.0.2.10:8080");
         assert_eq!(config.server.http_bind_addr, default_http_bind_addr());
+    }
+
+    #[test]
+    fn loads_perplexity_provider_compatibility_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_config(
+            &dir,
+            "custom.toml",
+            r#"
+[llm]
+provider = "perplexity"
+model = "openai/gpt-5.6-terra"
+base_url = "https://api.perplexity.ai/v1"
+"#,
+        );
+
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config.llm.provider, LlmProvider::Perplexity);
+        assert_eq!(config.llm.provider.as_str(), "perplexity");
     }
 
     #[test]

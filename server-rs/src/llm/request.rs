@@ -53,6 +53,7 @@ impl PromptTemplateContext {
 }
 
 /// Request-scoped context for building an LLM call
+#[derive(Clone)]
 pub struct LlmChatRequest {
     pub utterance: String,
     pub history: Vec<Message>,
@@ -61,6 +62,7 @@ pub struct LlmChatRequest {
     pub memory_context: Option<String>,
 
     pub image: Option<Vec<u8>>,
+    pub model: Option<String>,
 }
 
 impl LlmChatRequest {
@@ -78,12 +80,18 @@ impl LlmChatRequest {
             template_context,
             memory_context,
             image: None,
+            model: None,
         }
     }
 
     /// Attach an image asset to this request's new user turn
     pub fn with_image(mut self, image_bytes: Vec<u8>) -> Self {
         self.image = Some(image_bytes);
+        self
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
         self
     }
 }
